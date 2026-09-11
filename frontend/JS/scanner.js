@@ -61,24 +61,35 @@ async function startScanner() {
     const startBtn = document.getElementById("btnToggleScanner");
     const statusMsgEl = document.getElementById("scannerStatusMsg");
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        PawAPI.showToast("Your browser does not support camera streaming. You can still use the Potty Calculator! 💩", "warning");
+        return;
+    }
+
     try {
-        // Request camera access explicitly after click
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: "environment"
-            },
-            audio: false
-        });
+        // Attempt 1: Standard constraints with flexible ideal dimensions
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false
+            });
+        } catch (e1) {
+            // Attempt 2: Minimal generic constraint fallback (works on all desktop/USB webcams)
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false
+            });
+        }
 
         video.srcObject = cameraStream;
         await video.play();
 
         isScanning = true;
-        placeholder.style.display = "none";
-        startBtn.className = "btn btn-danger";
-        startBtn.innerHTML = `<span>⏹</span> Stop Scanner`;
+        if (placeholder) placeholder.style.display = "none";
+        if (startBtn) {
+            startBtn.className = "btn btn-danger";
+            startBtn.innerHTML = `<span>⏹</span> Stop Scanner`;
+        }
 
         if (statusMsgEl) statusMsgEl.textContent = "Watching for suspicious circles...";
         PawAPI.showToast("Camera active! Sniffing out dog signals... 🐾", "success");
@@ -91,9 +102,14 @@ async function startScanner() {
     } catch (err) {
         console.error("Camera access error:", err);
         if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-            PawAPI.showToast("Camera access is off. No worries — PawPotty can still make a routine-based estimate.", "warning");
+            PawAPI.showToast("Camera access was blocked. Click the lock/camera icon in your address bar to Allow camera! 📹", "warning");
+            if (statusMsgEl) {
+                statusMsgEl.innerHTML = `⚠️ <strong>Camera blocked in browser:</strong> Click the camera icon in your address bar (or site settings) and select <em>Allow</em>, then click Start Scanner.`;
+            }
+        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+            PawAPI.showToast("No webcam detected. Routine-based prediction is still fully active!", "warning");
         } else {
-            PawAPI.showToast("We couldn't open the camera. You can still use the calculator.", "warning");
+            PawAPI.showToast("Camera could not be opened. You can still use the Potty Calculator! 💩", "warning");
         }
     }
 }
