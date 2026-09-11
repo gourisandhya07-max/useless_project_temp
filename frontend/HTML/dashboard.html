@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Dashboard — PawPotty</title>
+
+    <link
+        rel="stylesheet"
+        href="../CSS/style.css"
+    >
+
+</head>
+
+
+<body>
+
+<div class="app-layout">
+
+
+    <aside class="sidebar">
+
+        <div class="sidebar-logo">
+            🐾 PawPotty
+        </div>
+
+        <nav>
+
+            <a
+                href="dashboard.html"
+                class="active"
+            >
+                🏠 Dashboard
+            </a>
+
+            <a href="dogs.html">
+                🐶 My Dogs
+            </a>
+
+            <a href="scanner.html">
+                📷 AI Scanner
+            </a>
+
+            <a href="calculator.html">
+                💩 Calculate
+            </a>
+
+            <a href="history.html">
+                📊 Potty Analytics
+            </a>
+
+        </nav>
+
+
+        <button
+            id="logoutBtn"
+            class="logout-btn"
+        >
+            🚪 Logout
+        </button>
+
+    </aside>
+
+
+    <main class="main-content">
+
+
+        <div class="topbar">
+
+            <div>
+
+                <p class="eyebrow">
+                    PAWPOTTY DASHBOARD
+                </p>
+
+                <h1>
+                    Good evening 👋
+                </h1>
+
+                <p>
+                    Let's see if your dog is
+                    planning something suspicious.
+                </p>
+
+            </div>
+
+
+            <a
+                href="calculator.html"
+                class="btn primary"
+            >
+                💩 Calculate
+            </a>
+
+        </div>
+
+
+        <!-- CURRENT DOG -->
+
+        <section
+            id="currentDog"
+            class="card dog-summary"
+        >
+
+            Loading dog...
+
+        </section>
+
+
+        <!-- METRICS -->
+
+        <div class="dashboard-grid">
+
+
+            <div class="metric-card">
+
+                <span class="metric-icon">
+                    💩
+                </span>
+
+                <p>
+                    Potty Probability
+                </p>
+
+                <div
+                    id="probability"
+                    class="metric"
+                >
+                    --
+                </div>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-icon">
+                    ⏰
+                </span>
+
+                <p>
+                    Estimated Time
+                </p>
+
+                <div
+                    id="estimatedTime"
+                    class="metric"
+                >
+                    --
+                </div>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-icon">
+                    ⏱️
+                </span>
+
+                <p>
+                    Time Remaining
+                </p>
+
+                <div
+                    id="timeRemaining"
+                    class="metric"
+                >
+                    --
+                </div>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-icon">
+                    🕐
+                </span>
+
+                <p>
+                    Last Potty
+                </p>
+
+                <div
+                    id="lastPotty"
+                    class="metric small"
+                >
+                    --
+                </div>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-icon">
+                    💩
+                </span>
+
+                <p>
+                    Today's Events
+                </p>
+
+                <div
+                    id="todayCount"
+                    class="metric"
+                >
+                    --
+                </div>
+
+            </div>
+
+
+            <div class="metric-card">
+
+                <span class="metric-icon">
+                    🤖
+                </span>
+
+                <p>
+                    AI Status
+                </p>
+
+                <div
+                    id="aiStatus"
+                    class="status-text"
+                >
+                    Waiting
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- QUICK ACTIONS -->
+
+        <section>
+
+            <h2 class="section-title">
+                Quick Actions
+            </h2>
+
+            <div class="quick-grid">
+
+                <a
+                    href="calculator.html"
+                    class="quick-card"
+                >
+                    <span>💩</span>
+
+                    <strong>
+                        Calculate Potty Time
+                    </strong>
+
+                    <small>
+                        Predict the next event
+                    </small>
+                </a>
+
+
+                <a
+                    href="scanner.html"
+                    class="quick-card"
+                >
+                    <span>📷</span>
+
+                    <strong>
+                        Scan My Dog
+                    </strong>
+
+                    <small>
+                        Use experimental AI vision
+                    </small>
+                </a>
+
+
+                <a
+                    href="history.html"
+                    class="quick-card"
+                >
+                    <span>📊</span>
+
+                    <strong>
+                        View Analytics
+                    </strong>
+
+                    <small>
+                        See potty history
+                    </small>
+                </a>
+
+            </div>
+
+        </section>
+
+
+        <div class="disclaimer">
+
+            ⚠️ PawPotty predictions are experimental
+            and for entertainment/hackathon purposes.
+            They are not veterinary advice.
+
+        </div>
+
+    </main>
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="../JS/supabase-config.js"></script>
+
+<script src="../JS/dashboard.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>My Dogs — PawPotty</title>
+
+    <link
+        rel="stylesheet"
+        href="../CSS/style.css"
+    >
+
+</head>
+
+
+<body>
+
+<div class="app-layout">
+
+    <!-- SIDEBAR -->
+
+    <aside class="sidebar">
+
+        <div class="sidebar-logo">
+            🐾 PawPotty
+        </div>
+
+        <nav>
+
+            <a href="dashboard.html">
+                🏠 Dashboard
+            </a>
+
+            <a href="dogs.html"
+               class="active">
+                🐶 My Dogs
+            </a>
+
+            <a href="scanner.html">
+                📷 AI Scanner
+            </a>
+
+            <a href="calculator.html">
+                💩 Calculate
+            </a>
+
+            <a href="history.html">
+                📊 Potty Analytics
+            </a>
+
+        </nav>
+
+        <button
+            id="logoutBtn"
+            class="logout-btn"
+        >
+            🚪 Logout
+        </button>
+
+    </aside>
+
+
+    <!-- MAIN -->
+
+    <main class="main-content">
+
+        <div class="topbar">
+
+            <div>
+                <h1>🐶 My Dogs</h1>
+
+                <p>
+                    Manage your furry suspects.
+                </p>
+            </div>
+
+        </div>
+
+
+        <!-- ADD DOG -->
+
+        <section class="card">
+
+            <h2>Add a Dog</h2>
+
+            <form id="dogForm">
+
+                <div class="form-grid">
+
+                    <div class="field">
+
+                        <label>Dog's name</label>
+
+                        <input
+                            id="dogName"
+                            required
+                            placeholder="Buddy"
+                        >
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Age</label>
+
+                        <input
+                            id="dogAge"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            placeholder="3"
+                        >
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Weight (kg)</label>
+
+                        <input
+                            id="dogWeight"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            placeholder="12"
+                        >
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Breed</label>
+
+                        <input
+                            id="dogBreed"
+                            placeholder="Golden Retriever"
+                        >
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Gender</label>
+
+                        <select id="dogGender">
+
+                            <option value="">
+                                Prefer not to say
+                            </option>
+
+                            <option>Male</option>
+
+                            <option>Female</option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Food / Diet</label>
+
+                        <input
+                            id="dogFood"
+                            placeholder="Chicken + rice"
+                        >
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Water consumed</label>
+
+                        <input
+                            id="dogWater"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            placeholder="2"
+                        >
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Activity</label>
+
+                        <select id="dogActivity">
+
+                            <option>Low</option>
+
+                            <option selected>
+                                Moderate
+                            </option>
+
+                            <option>High</option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Current mood</label>
+
+                        <select id="dogMood">
+
+                            <option>Calm</option>
+
+                            <option>Happy</option>
+
+                            <option>Excited</option>
+
+                            <option>Restless</option>
+
+                            <option>Sleepy</option>
+
+                            <option>Suspicious 😂</option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="field">
+
+                        <label>Last potty time</label>
+
+                        <input
+                            id="dogLastPotty"
+                            type="datetime-local"
+                        >
+
+                    </div>
+
+                </div>
+
+
+                <button
+                    class="btn primary"
+                    type="submit"
+                >
+                    🐾 Save Dog
+                </button>
+
+            </form>
+
+        </section>
+
+
+        <!-- DOG LIST -->
+
+        <section>
+
+            <h2 class="section-title">
+                Your Dogs
+            </h2>
+
+            <div
+                id="dogList"
+                class="dog-grid"
+            ></div>
+
+        </section>
+
+    </main>
+
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="../JS/supabase-config.js"></script>
+
+<script src="../JS/dogs.js"></script>
+
+</body>
+
+</html>

@@ -155,3 +155,4 @@ def calculate_prediction(
         "recommended_action": action,
         "hours_since_potty": round(hours_since_potty, 2)
     }
+  
