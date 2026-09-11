@@ -1,588 +1,189 @@
-let currentDog = null;
+// PawPotty History & Analytics Controller (Chart.js Integration)
 
-let chart = null;
+let activeDogId = null;
+let distributionChart = null;
+let accuracyChart = null;
 
-
-// -----------------------------
-// LOAD USER
-// -----------------------------
-
-async function getUser() {
-
-    const {
-        data,
-        error
-    } = await supabaseClient.auth.getUser();
-
-    if (error || !data.user) {
-
-        window.location.href =
-            "index.html";
-
-        return null;
-    }
-
-    return data.user;
+async function initHistory() {
+    activeDogId = PawAPI.getActiveDogId();
+    await loadHistoryStats();
+    setupLogEventModal();
 }
 
+async function loadHistoryStats() {
+    if (!activeDogId) return;
 
-// -----------------------------
-// LOAD DATA
-// -----------------------------
-
-async function loadHistory() {
-
-    const user =
-        await getUser();
-
-    if (!user) return;
-
-
-    const dogId =
-        localStorage.getItem(
-            "selectedDogId"
-        );
-
-
-    if (!dogId) {
-
-        alert(
-            "Select a dog first."
-        );
-
-        window.location.href =
-            "dogs.html";
-
-        return;
+    try {
+        const stats = await PawAPI.getPottyStats(activeDogId);
+        renderStatsCards(stats);
+        renderHistoryTable(stats.history_table || []);
+        renderCharts(stats);
+    } catch (e) {
+        console.error("Could not load potty stats:", e);
     }
-
-
-    const {
-        data: dog
-    } = await supabaseClient
-        .from("dogs")
-        .select("*")
-        .eq("id", dogId)
-        .single();
-
-
-    currentDog = dog;
-
-
-    const {
-        data: events,
-        error
-    } = await supabaseClient
-        .from("potty_events")
-        .select("*")
-        .eq("dog_id", dogId)
-        .order("potty_time", {
-            ascending: false
-        });
-
-
-    if (error) {
-
-        console.error(error);
-
-        return;
-    }
-
-
-    const eventList =
-        events || [];
-
-
-    updateStats(
-        eventList
-    );
-
-
-    renderTable(
-        eventList
-    );
-
-
-    renderChart(
-        eventList
-    );
 }
 
+function renderStatsCards(stats) {
+    const totalEl = document.getElementById("statTotalEvents");
+    const intervalEl = document.getElementById("statAvgInterval");
+    const accuracyEl = document.getElementById("statAvgAccuracy");
+    const commonEl = document.getElementById("statCommonTime");
+    const todayEl = document.getElementById("statTodayCount");
 
-// -----------------------------
-// STATS
-// -----------------------------
-
-function updateStats(
-    events
-) {
-
-    document.getElementById(
-        "totalEvents"
-    ).textContent =
-        events.length;
-
-
-    const today =
-        new Date();
-
-    today.setHours(
-        0,
-        0,
-        0,
-        0
-    );
-
-
-    const todayEvents =
-        events.filter(event =>
-            new Date(
-                event.potty_time
-            ) >= today
-        );
-
-
-    document.getElementById(
-        "todayEvents"
-    ).textContent =
-        todayEvents.length;
-
-
-    if (events.length < 2) {
-
-        document.getElementById(
-            "averageInterval"
-        ).textContent =
-            "--";
-
-    } else {
-
-        const sorted =
-            [...events].sort(
-                (a, b) =>
-                    new Date(a.potty_time) -
-                    new Date(b.potty_time)
-            );
-
-
-        let totalDifference = 0;
-
-
-        for (
-            let i = 1;
-            i < sorted.length;
-            i++
-        ) {
-
-            totalDifference +=
-                new Date(
-                    sorted[i].potty_time
-                ) -
-                new Date(
-                    sorted[i - 1].potty_time
-                );
-        }
-
-
-        const average =
-            totalDifference /
-            (sorted.length - 1);
-
-
-        const hours =
-            average /
-            (1000 * 60 * 60);
-
-
-        document.getElementById(
-            "averageInterval"
-        ).textContent =
-            `${hours.toFixed(1)}h`;
-    }
-
-
-    // Accuracy is calculated from
-    // predictions stored in Supabase.
-    loadAccuracy();
+    if (totalEl) totalEl.textContent = stats.total_events;
+    if (intervalEl) intervalEl.textContent = `${stats.average_interval_hours}h`;
+    if (accuracyEl) accuracyEl.textContent = `${stats.average_accuracy}%`;
+    if (commonEl) commonEl.textContent = stats.most_common_time;
+    if (todayEl) todayEl.textContent = stats.today_count;
 }
 
+function renderHistoryTable(records) {
+    const tbody = document.getElementById("historyTableBody");
+    if (!tbody) return;
 
-// -----------------------------
-// ACCURACY
-// -----------------------------
-
-async function loadAccuracy() {
-
-    if (!currentDog) return;
-
-
-    const {
-        data: predictions
-    } =
-        await supabaseClient
-            .from("predictions")
-            .select("*")
-            .eq(
-                "dog_id",
-                currentDog.id
-            );
-
-
-    if (
-        !predictions ||
-        !predictions.length
-    ) {
-
-        document.getElementById(
-            "accuracy"
-        ).textContent =
-            "--";
-
-        return;
-    }
-
-
-    // Simple demo accuracy metric.
-    // It can be improved later by matching
-    // predicted_time with actual potty_time.
-
-    document.getElementById(
-        "accuracy"
-    ).textContent =
-        "Learning";
-}
-
-
-// -----------------------------
-// TABLE
-// -----------------------------
-
-function renderTable(
-    events
-) {
-
-    const table =
-        document.getElementById(
-            "historyTable"
-        );
-
-
-    if (!events.length) {
-
-        table.innerHTML = `
+    if (records.length === 0) {
+        tbody.innerHTML = `
             <tr>
-                <td colspan="4">
-                    No potty events yet 💩
+                <td colspan="6" style="text-align: center; padding: 36px 16px; color: var(--text-muted);">
+                    🐾 No potty stories yet. This chapter is still blank!
                 </td>
             </tr>
         `;
-
         return;
     }
 
-
-    table.innerHTML =
-        events
-            .slice(0, 20)
-            .map(event => {
-
-                const date =
-                    new Date(
-                        event.potty_time
-                    );
-
-
-                return `
-
-                    <tr>
-
-                        <td>
-                            ${date.toLocaleDateString()}
-                        </td>
-
-                        <td>
-                            ${date.toLocaleTimeString(
-                                [],
-                                {
-                                    hour: "numeric",
-                                    minute: "2-digit"
-                                }
-                            )}
-                        </td>
-
-                        <td>
-                            ${escapeHtml(
-                                event.food ||
-                                "--"
-                            )}
-                        </td>
-
-                        <td>
-                            ${event.activity_level || "--"}
-                        </td>
-
-                    </tr>
-
-                `;
-
-            })
-            .join("");
+    tbody.innerHTML = records.map(r => `
+        <tr>
+            <td><strong>${r.date}</strong></td>
+            <td>${r.predicted}</td>
+            <td><strong>${r.actual}</strong></td>
+            <td>${r.difference}</td>
+            <td><span class="badge badge-success">${r.accuracy}</span></td>
+            <td style="color: var(--text-muted); font-size: 13px;">${r.notes}</td>
+        </tr>
+    `).join("");
 }
 
+function renderCharts(stats) {
+    if (typeof Chart === "undefined") return;
 
-// -----------------------------
-// CHART
-// -----------------------------
+    // 1. Hourly Distribution Chart
+    const distCanvas = document.getElementById("chartDistribution");
+    if (distCanvas && stats.hourly_distribution) {
+        if (distributionChart) distributionChart.destroy();
 
-function renderChart(
-    events
-) {
+        const labels = Array.from({ length: 24 }, (_, i) => {
+            const ampm = i < 12 ? "AM" : "PM";
+            const h = i % 12 === 0 ? 12 : i % 12;
+            return `${h}${ampm}`;
+        });
 
-    const canvas =
-        document.getElementById(
-            "pottyChart"
-        );
-
-
-    const grouped = {};
-
-
-    events.forEach(event => {
-
-        const date =
-            new Date(
-                event.potty_time
-            )
-            .toLocaleDateString();
-
-
-        grouped[date] =
-            (grouped[date] || 0) + 1;
-
-    });
-
-
-    const labels =
-        Object.keys(grouped)
-            .reverse();
-
-
-    const values =
-        labels.map(
-            date => grouped[date]
-        );
-
-
-    if (chart) {
-
-        chart.destroy();
+        distributionChart = new Chart(distCanvas, {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: "Potty Breaks",
+                    data: stats.hourly_distribution,
+                    backgroundColor: "#6FAF72",
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
     }
 
+    // 2. Accuracy Gauge / Trend Chart
+    const accCanvas = document.getElementById("chartAccuracy");
+    if (accCanvas && stats.history_table) {
+        if (accuracyChart) accuracyChart.destroy();
 
-    chart =
-        new Chart(
-            canvas,
-            {
+        const recentAcc = stats.history_table.slice(-7).map(r => parseInt(r.accuracy, 10));
+        const recentLabels = stats.history_table.slice(-7).map(r => r.date.split(",")[0]);
 
-                type: "bar",
-
-                data: {
-
-                    labels,
-
-                    datasets: [
-                        {
-                            label:
-                                "Potty Events",
-
-                            data: values
-                        }
-                    ]
+        accuracyChart = new Chart(accCanvas, {
+            type: "line",
+            data: {
+                labels: recentLabels,
+                datasets: [{
+                    label: "Accuracy %",
+                    data: recentAcc,
+                    borderColor: "#F2B84B",
+                    backgroundColor: "rgba(242, 184, 75, 0.15)",
+                    fill: true,
+                    tension: 0.35,
+                    borderWidth: 3,
+                    pointRadius: 4,
+                    pointBackgroundColor: "#F2B84B"
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
                 },
-
-                options: {
-
-                    responsive: true,
-
-                    plugins: {
-
-                        legend: {
-                            display: false
-                        }
-
-                    }
-
+                scales: {
+                    y: { min: 50, max: 100 }
                 }
-
             }
-        );
+        });
+    }
 }
 
+function setupLogEventModal() {
+    const modal = document.getElementById("logPottyModal");
+    const form = document.getElementById("logPottyForm");
+    const timeInput = document.getElementById("logPottyTime");
 
-// -----------------------------
-// RECORD EVENT
-// -----------------------------
+    if (timeInput) {
+        const now = new Date();
+        const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        timeInput.value = localIso;
+    }
 
-document
-    .getElementById("eventForm")
-    .addEventListener(
-        "submit",
-        async event => {
+    if (!form) return;
 
-            event.preventDefault();
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const payload = {
+            dog_id: activeDogId,
+            potty_time: timeInput.value ? new Date(timeInput.value).toISOString() : new Date().toISOString(),
+            food: document.getElementById("logPottyFood")?.value || "Standard Kibble",
+            water: document.getElementById("logPottyWater")?.value || "Moderate",
+            activity_level: document.getElementById("logPottyActivity")?.value || "Moderate",
+            notes: document.getElementById("logPottyNotes")?.value || "Routine potty break"
+        };
 
-
-            if (!currentDog) {
-
-                alert(
-                    "No dog selected."
-                );
-
-                return;
-            }
-
-
-            const pottyTime =
-                document
-                    .getElementById(
-                        "pottyTime"
-                    )
-                    .value;
-
-
-            const record = {
-
-                dog_id:
-                    currentDog.id,
-
-                potty_time:
-                    new Date(
-                        pottyTime
-                    ).toISOString(),
-
-                food:
-                    document
-                        .getElementById(
-                            "eventFood"
-                        )
-                        .value,
-
-                water:
-                    Number(
-                        document
-                            .getElementById(
-                                "eventWater"
-                            )
-                            .value
-                    ) || 0,
-
-                activity_level:
-                    document
-                        .getElementById(
-                            "eventActivity"
-                        )
-                        .value,
-
-                notes:
-                    document
-                        .getElementById(
-                            "eventNotes"
-                        )
-                        .value
-            };
-
-
-            const {
-                error
-            } =
-                await supabaseClient
-                    .from(
-                        "potty_events"
-                    )
-                    .insert(record);
-
-
-            if (error) {
-
-                alert(
-                    "Could not save event."
-                );
-
-                console.error(error);
-
-                return;
-            }
-
-
-            // Also update dog's last potty time
-
-            await supabaseClient
-                .from("dogs")
-                .update({
-                    last_potty_time:
-                        record.potty_time
-                })
-                .eq(
-                    "id",
-                    currentDog.id
-                );
-
-
-            alert(
-                "💩 Potty event recorded!"
-            );
-
-
-            document
-                .getElementById(
-                    "eventForm"
-                )
-                .reset();
-
-
-            loadHistory();
-
+        try {
+            await PawAPI.logPottyEvent(payload);
+            PawAPI.showToast("Case closed! Potty break recorded. 💩", "success");
+            closeLogModal();
+            await loadHistoryStats();
+        } catch (err) {
+            PawAPI.showToast("Could not record potty event", "danger");
         }
-    );
-
-
-// -----------------------------
-// LOGOUT
-// -----------------------------
-
-document
-    .getElementById(
-        "logoutBtn"
-    )
-    .addEventListener(
-        "click",
-        async () => {
-
-            await supabaseClient
-                .auth
-                .signOut();
-
-            localStorage.clear();
-
-            window.location.href =
-                "index.html";
-        }
-    );
-
-
-// -----------------------------
-// ESCAPE HTML
-// -----------------------------
-
-function escapeHtml(value) {
-
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+    };
 }
 
+function openLogModal() {
+    const modal = document.getElementById("logPottyModal");
+    if (modal) modal.style.display = "flex";
+}
 
-loadHistory();
+function closeLogModal() {
+    const modal = document.getElementById("logPottyModal");
+    if (modal) modal.style.display = "none";
+}
+
+document.addEventListener("DOMContentLoaded", initHistory);

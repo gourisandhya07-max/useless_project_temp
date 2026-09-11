@@ -1,157 +1,154 @@
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import datetime, timezone
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Header
+
+from database.db import get_db_connection
+from models.schemas import (
+    PredictionRequest,
+    PredictionResponse,
+    GroqExplanationRequest,
+    GroqExplanationResponse
+)
+from services.prediction_service import calculate_prediction
+from services.groq_service import generate_groq_explanation
+from routes.auth import get_current_user_id
+
+router = APIRouter(tags=["predictions"])
 
 
-ACTIVITY_SCORES = {
-    "Low": 5,
-    "Moderate": 12,
-    "High": 20
-}
-
-MOOD_SCORES = {
-    "Calm": 0,
-    "Happy": 3,
-    "Excited": 8,
-    "Restless": 18,
-    "Sleepy": -3,
-    "Suspicious 😂": 15
-}
-
-
-def calculate_prediction(
-    age,
-    weight,
-    food,
-    water,
-    activity_level,
-    mood,
-    last_potty_time,
-    vision=None
-):
+@router.post("/api/predictions", response_model=PredictionResponse)
+async def create_prediction(payload: PredictionRequest, authorization: Optional[str] = Header(None)):
     """
-    Fun/experimental prediction engine.
-
-    This is NOT a veterinary model.
+    Computes a deterministic potty time prediction and enriches it
+    with a server-side Groq natural-language explanation.
     """
+    user_id = get_current_user_id(authorization)
 
-    now = datetime.now(timezone.utc)
+    # If dog_id provided, look up saved info for any missing attributes
+    dog_name = payload.dog_name or "Your pup"
+    age = payload.age
+    weight = payload.weight
+    food = payload.food
+    water = payload.water
+    activity_level = payload.activity_level
+    mood = payload.mood
+    last_potty_time = payload.last_potty_time
 
-    if last_potty_time:
-        if isinstance(last_potty_time, str):
-            last_potty_time = datetime.fromisoformat(
-                last_potty_time.replace("Z", "+00:00")
-            )
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-        if last_potty_time.tzinfo is None:
-            last_potty_time = last_potty_time.replace(tzinfo=timezone.utc)
+    if payload.dog_id:
+        cursor.execute("SELECT * FROM dogs WHERE id = ?", (payload.dog_id,))
+        dog_row = cursor.fetchone()
+        if dog_row:
+            dog_name = dog_row["name"]
+            if age is None:
+                age = dog_row["age"]
+            if weight is None:
+                weight = dog_row["weight"]
+            if not food or food == "Regular food":
+                food = dog_row["food"]
+            if not water or water == "Moderate":
+                water = dog_row["water_consumption"]
+            if not activity_level or activity_level == "Moderate":
+                activity_level = dog_row["activity_level"]
+            if not mood or mood == "Calm":
+                mood = dog_row["current_mood"]
+            if not last_potty_time:
+                last_potty_time = dog_row["last_potty_time"]
 
-        hours_since_potty = (
-            now - last_potty_time
-        ).total_seconds() / 3600
-
-    else:
-        hours_since_potty = 3
-
-    score = 20
-
-    factors = []
-
-    # Time factor
-    time_score = min(hours_since_potty * 8, 35)
-    score += time_score
-
-    if hours_since_potty >= 4:
-        factors.append(
-            f"{hours_since_potty:.1f} hours since the last potty"
-        )
-
-    # Activity
-    activity_score = ACTIVITY_SCORES.get(activity_level, 10)
-    score += activity_score
-
-    if activity_level == "High":
-        factors.append("High activity level")
-
-    # Mood
-    mood_score = MOOD_SCORES.get(mood, 0)
-    score += mood_score
-
-    if mood in ["Restless", "Suspicious 😂"]:
-        factors.append(f"{mood} behavior")
-
-    # Water
-    try:
-        water_value = float(water or 0)
-    except (TypeError, ValueError):
-        water_value = 0
-
-    water_score = min(water_value * 2, 15)
-    score += water_score
-
-    if water_value > 2:
-        factors.append("Higher reported water consumption")
-
-    # Vision signals
-    vision = vision or {}
-
-    if vision.get("dog_detected"):
-        score += 5
-        factors.append("Dog detected by camera")
-
-    if vision.get("restlessness"):
-        score += 15
-        factors.append("Camera detected increased movement")
-
-    if vision.get("circling"):
-        score += 20
-        factors.append("Possible circling behavior detected")
-
-    if vision.get("squatting"):
-        score += 30
-        factors.append("Possible squatting posture detected")
-
-    # Clamp probability
-    probability = max(1, min(round(score), 99))
-
-    # Estimate minutes
-    if probability >= 90:
-        minutes = 8
-    elif probability >= 80:
-        minutes = 15
-    elif probability >= 70:
-        minutes = 25
-    elif probability >= 60:
-        minutes = 40
-    elif probability >= 50:
-        minutes = 60
-    else:
-        minutes = 90
-
-    predicted_time = now + timedelta(minutes=minutes)
-
-    confidence = min(
-        95,
-        max(
-            35,
-            50 + len(factors) * 8
-        )
+    # 1. Deterministic Calculation
+    result = calculate_prediction(
+        age=age,
+        weight=weight,
+        food=food,
+        water=water,
+        activity_level=activity_level,
+        mood=mood,
+        last_potty_time=last_potty_time,
+        vision=payload.vision
     )
 
-    if not factors:
-        factors.append("Routine-based estimate")
+    # 2. Server-side Groq explanation
+    vision_data = payload.vision or {}
+    restlessness_label = "moderate"
+    if vision_data.get("restlessness", 0) > 0.65:
+        restlessness_label = "high"
+    elif vision_data.get("restlessness", 0) < 0.3:
+        restlessness_label = "calm"
 
-    if probability >= 85:
-        action = "Get ready for a possible potty trip!"
-    elif probability >= 65:
-        action = "Keep an eye on your dog."
-    else:
-        action = "Probably safe to relax for now."
+    explanation, action, _ = await generate_groq_explanation(
+        dog_name=dog_name,
+        probability=result["probability"],
+        minutes=result["minutes_until"],
+        restlessness=restlessness_label,
+        circling=bool(vision_data.get("circling", False)),
+        last_potty_hours=result["hours_since_potty"],
+        water=str(water),
+        activity=str(activity_level),
+        mood=str(mood)
+    )
 
-    return {
-        "probability": probability,
-        "confidence": confidence,
-        "minutes_until": minutes,
-        "predicted_time": predicted_time.isoformat(),
-        "factors": factors,
-        "recommended_action": action,
-        "hours_since_potty": round(hours_since_potty, 2)
-    }
+    result["explanation"] = explanation
+    result["recommended_action"] = action
+
+    # 3. Store prediction in DB
+    pred_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    dog_ref_id = payload.dog_id or "dog_adhoc"
+
+    cursor.execute("""
+        INSERT INTO predictions (
+            id, dog_id, predicted_time, probability, confidence,
+            posture_signal, facial_signal, movement_signal, restlessness,
+            explanation, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        pred_id, dog_ref_id, result["predicted_time"],
+        result["probability"], result["confidence"],
+        vision_data.get("posture"), vision_data.get("facial_signal"),
+        float(vision_data.get("movement") or 0.0),
+        float(vision_data.get("restlessness") or 0.0),
+        explanation, now
+    ))
+    conn.commit()
+    conn.close()
+
+    return PredictionResponse(**result)
+
+
+@router.get("/api/predictions/{dog_id}")
+def get_dog_predictions(dog_id: str, authorization: Optional[str] = Header(None)):
+    """Retrieves prediction history for a specific dog."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM predictions WHERE dog_id = ? ORDER BY created_at DESC LIMIT 20
+    """, (dog_id,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(r) for r in rows]
+
+
+@router.post("/api/ai/explanation", response_model=GroqExplanationResponse)
+async def get_ai_explanation(payload: GroqExplanationRequest):
+    """Direct API to request a fresh Groq-generated funny dog behavior summary."""
+    explanation, action, source = await generate_groq_explanation(
+        dog_name=payload.dog_name,
+        probability=payload.probability,
+        minutes=payload.minutes,
+        restlessness=payload.restlessness or "moderate",
+        circling=bool(payload.circling),
+        last_potty_hours=payload.last_potty_hours or 4.0,
+        water=payload.water or "moderate",
+        activity=payload.activity or "moderate",
+        mood=payload.mood or "Suspicious 😂"
+    )
+
+    return GroqExplanationResponse(
+        explanation=explanation,
+        recommended_action=action,
+        source=source
+    )

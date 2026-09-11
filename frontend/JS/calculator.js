@@ -1,562 +1,184 @@
-const form =
-    document.getElementById(
-        "predictionForm"
-    );
+// PawPotty Calculator Controller
 
+let selectedDog = null;
 
-let countdownTimer = null;
-
-
-form.addEventListener(
-    "submit",
-    async (event) => {
-
-        event.preventDefault();
-
-
-        const button =
-            form.querySelector(
-                "button"
-            );
-
-
-        button.disabled = true;
-
-        button.textContent =
-            "🧠 THINKING...";
-
-
-        try {
-
-            const data = {
-
-                dog_name:
-                    document
-                        .getElementById(
-                            "dogName"
-                        )
-                        .value,
-
-                age:
-                    Number(
-                        document
-                            .getElementById(
-                                "age"
-                            )
-                            .value
-                    ) || null,
-
-                weight:
-                    Number(
-                        document
-                            .getElementById(
-                                "weight"
-                            )
-                            .value
-                    ) || null,
-
-                food:
-                    document
-                        .getElementById(
-                            "food"
-                        )
-                        .value,
-
-                water:
-                    Number(
-                        document
-                            .getElementById(
-                                "water"
-                            )
-                            .value
-                    ) || 0,
-
-                activity_level:
-                    document
-                        .getElementById(
-                            "activity"
-                        )
-                        .value,
-
-                mood:
-                    document
-                        .getElementById(
-                            "mood"
-                        )
-                        .value,
-
-                last_potty_time:
-                    document
-                        .getElementById(
-                            "lastPotty"
-                        )
-                        .value || null,
-
-                vision: null
-            };
-
-
-            // -------------------------
-            // CALL FASTAPI
-            // -------------------------
-
-            const result =
-                await apiRequest(
-                    "/api/predictions/calculate",
-                    {
-                        method: "POST",
-
-                        body:
-                            JSON.stringify(
-                                data
-                            )
-                    }
-                );
-
-
-            displayPrediction(
-                result
-            );
-
-
-            // Save to Supabase
-            await savePrediction(
-                result
-            );
-
-
-            // Alert
-            if (
-                result.probability >= 85
-            ) {
-
-                showPottyAlert(
-                    result
-                );
-            }
-
-
-        } catch (error) {
-
-            console.error(error);
-
-            alert(
-                "❌ Something went wrong. " +
-                error.message
-            );
-
-        } finally {
-
-            button.disabled = false;
-
-            button.textContent =
-                "💩 CALCULATE POTTY TIME";
-        }
-
-    }
-);
-
-
-// -----------------------------
-// DISPLAY RESULT
-// -----------------------------
-
-function displayPrediction(
-    result
-) {
-
-    document.getElementById(
-        "result"
-    ).classList.add("show");
-
-
-    document.getElementById(
-        "probability"
-    ).textContent =
-        `${result.probability}%`;
-
-
-    const estimated =
-        new Date(
-            result.predicted_time
-        );
-
-
-    document.getElementById(
-        "estimatedTime"
-    ).textContent =
-        estimated.toLocaleTimeString(
-            [],
-            {
-                hour: "numeric",
-                minute: "2-digit"
-            }
-        );
-
-
-    document.getElementById(
-        "confidence"
-    ).textContent =
-        `${result.confidence}%`;
-
-
-    document.getElementById(
-        "action"
-    ).textContent =
-        result.recommended_action;
-
-
-    document.getElementById(
-        "explanation"
-    ).textContent =
-        result.explanation;
-
-
-    const factors =
-        document.getElementById(
-            "factors"
-        );
-
-
-    factors.innerHTML =
-        "";
-
-
-    if (
-        result.factors &&
-        result.factors.length
-    ) {
-
-        result.factors.forEach(
-            factor => {
-
-                const div =
-                    document.createElement(
-                        "div"
-                    );
-
-                div.className =
-                    "factor";
-
-                div.textContent =
-                    `🐾 ${factor}`;
-
-                factors.appendChild(
-                    div
-                );
-            }
-        );
-
-    } else {
-
-        factors.innerHTML =
-            `<div class="factor">
-                No major factors detected.
-             </div>`;
-    }
-
-
-    startCountdown(
-        estimated
-    );
+async function initCalculator() {
+    await populateDogSelector();
+    setupCalculatorForm();
 }
 
-
-// -----------------------------
-// COUNTDOWN
-// -----------------------------
-
-function startCountdown(
-    targetTime
-) {
-
-    if (countdownTimer) {
-
-        clearInterval(
-            countdownTimer
-        );
-    }
-
-
-    function update() {
-
-        const difference =
-            targetTime.getTime() -
-            Date.now();
-
-
-        if (difference <= 0) {
-
-            document.getElementById(
-                "countdown"
-            ).textContent =
-                "💩 It may be potty time!";
-
-            clearInterval(
-                countdownTimer
-            );
-
-            return;
-        }
-
-
-        const minutes =
-            Math.floor(
-                difference / 60000
-            );
-
-
-        const seconds =
-            Math.floor(
-                (difference % 60000) /
-                1000
-            );
-
-
-        document.getElementById(
-            "countdown"
-        ).textContent =
-            `⏳ ${minutes}m ${seconds}s remaining`;
-    }
-
-
-    update();
-
-    countdownTimer =
-        setInterval(
-            update,
-            1000
-        );
-}
-
-
-// -----------------------------
-// SAVE PREDICTION
-// -----------------------------
-
-async function savePrediction(
-    result
-) {
-
-    // Supabase is optional here.
-    // If the user hasn't configured it,
-    // the calculator still works.
-
-    if (
-        typeof supabaseClient ===
-        "undefined"
-    ) {
-
-        return;
-    }
-
-
-    const {
-        data: userData
-    } =
-        await supabaseClient.auth
-            .getUser();
-
-
-    const user =
-        userData?.user;
-
-
-    if (!user) return;
-
-
-    const dogId =
-        localStorage.getItem(
-            "selectedDogId"
-        );
-
-
-    if (!dogId) return;
-
-
-    await supabaseClient
-        .from("predictions")
-        .insert({
-
-            dog_id: dogId,
-
-            predicted_time:
-                result.predicted_time,
-
-            probability:
-                result.probability,
-
-            confidence:
-                result.confidence,
-
-            posture_signal:
-                result.posture_signal ||
-                "Unavailable",
-
-            facial_signal:
-                result.facial_signal ||
-                "Experimental",
-
-            movement_signal:
-                result.movement_signal ||
-                "Unavailable",
-
-            explanation:
-                result.explanation
-
-        });
-}
-
-
-// -----------------------------
-// POTTY ALERT
-// -----------------------------
-
-function showPottyAlert(
-    result
-) {
-
-    let alertBox =
-        document.getElementById(
-            "pottyAlert"
-        );
-
-
-    if (!alertBox) {
-
-        alertBox =
-            document.createElement(
-                "div"
-            );
-
-        alertBox.id =
-            "pottyAlert";
-
-        alertBox.className =
-            "alert";
-
-        alertBox.innerHTML = `
-
-            <button
-                class="alert-close"
-                onclick="
-                    this.parentElement
-                        .classList
-                        .remove('show')
-                "
-            >
-                ×
-            </button>
-
-            <h2>
-                🚨 POTTY ALERT!
-            </h2>
-
-            <p>
-                Your dog may need to
-                go soon!
-            </p>
-
-            <strong
-                id="alertProbability"
-            >
-            </strong>
-
-            <p>
-                Get ready! 🐕💨
-            </p>
-
-            <button
-                class="btn secondary"
-                onclick="
-                    this.parentElement
-                        .classList
-                        .remove('show')
-                "
-            >
-                Dismiss Alert
-            </button>
-        `;
-
-
-        document.body.appendChild(
-            alertBox
-        );
-    }
-
-
-    document.getElementById(
-        "alertProbability"
-    ).textContent =
-        `Potty probability: ${result.probability}%`;
-
-
-    alertBox.classList.add(
-        "show"
-    );
-
-
-    playAlarm();
-}
-
-
-// -----------------------------
-// SOUND
-// -----------------------------
-
-function playAlarm() {
+async function populateDogSelector() {
+    const selector = document.getElementById("calcDogSelect");
+    if (!selector) return;
 
     try {
+        const dogs = await PawAPI.getDogs();
+        if (dogs.length > 0) {
+            selector.innerHTML = dogs.map(d => `
+                <option value="${d.id}" data-dog='${JSON.stringify(d)}'>
+                    🐶 ${d.name} (${d.breed || 'Pup'})
+                </option>
+            `).join("");
 
-        const audioContext =
-            new (
-                window.AudioContext ||
-                window.webkitAudioContext
-            )();
-
-
-        const oscillator =
-            audioContext
-                .createOscillator();
-
-
-        const gain =
-            audioContext
-                .createGain();
-
-
-        oscillator.connect(gain);
-
-        gain.connect(
-            audioContext.destination
-        );
-
-
-        oscillator.frequency.value =
-            700;
-
-        gain.gain.value =
-            0.08;
-
-
-        oscillator.start();
-
-
-        setTimeout(
-            () => {
-
-                oscillator.stop();
-
-                audioContext.close();
-
-            },
-            500
-        );
-
-    } catch (error) {
-
-        console.log(
-            "Alarm unavailable"
-        );
+            // Pre-fill fields with selected dog
+            selector.onchange = () => fillDogData(JSON.parse(selector.selectedOptions[0].dataset.dog));
+            fillDogData(dogs[0]);
+        }
+    } catch (e) {
+        console.warn("Could not load dogs into calculator:", e);
     }
 }
+
+function fillDogData(dog) {
+    selectedDog = dog;
+    if (!dog) return;
+
+    const ageInput = document.getElementById("calcAge");
+    const weightInput = document.getElementById("calcWeight");
+    const foodInput = document.getElementById("calcFood");
+    const waterSelect = document.getElementById("calcWater");
+    const activitySelect = document.getElementById("calcActivity");
+    const moodSelect = document.getElementById("calcMood");
+    const lastPottyInput = document.getElementById("calcLastPotty");
+
+    if (ageInput) ageInput.value = dog.age || 2.5;
+    if (weightInput) weightInput.value = dog.weight || 22.0;
+    if (foodInput) foodInput.value = dog.food || "Kibble & Fresh Chicken";
+    if (waterSelect) waterSelect.value = dog.water_consumption || "High";
+    if (activitySelect) activitySelect.value = dog.activity_level || "High";
+    if (moodSelect) moodSelect.value = dog.current_mood || "Suspicious 😂";
+
+    if (lastPottyInput && dog.last_potty_time) {
+        try {
+            const dt = new Date(dog.last_potty_time);
+            // Format for datetime-local input
+            const localIso = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            lastPottyInput.value = localIso;
+        } catch (e) {}
+    }
+}
+
+function setupCalculatorForm() {
+    const form = document.getElementById("pottyCalculatorForm");
+    const calcBtn = document.getElementById("btnCalculatePotty");
+    const resultSection = document.getElementById("calculatorResultSection");
+
+    if (!form) return;
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+
+        // Animated button state
+        const origBtnText = calcBtn.innerHTML;
+        calcBtn.innerHTML = `<span>🐾</span> Sniffing the data...`;
+        calcBtn.disabled = true;
+
+        const payload = {
+            dog_id: selectedDog?.id,
+            dog_name: selectedDog?.name || "Your pup",
+            age: parseFloat(document.getElementById("calcAge").value) || 2.5,
+            weight: parseFloat(document.getElementById("calcWeight").value) || 20.0,
+            food: document.getElementById("calcFood").value,
+            water: document.getElementById("calcWater").value,
+            activity_level: document.getElementById("calcActivity").value,
+            mood: document.getElementById("calcMood").value,
+            last_potty_time: document.getElementById("calcLastPotty").value ? new Date(document.getElementById("calcLastPotty").value).toISOString() : null
+        };
+
+        try {
+            const res = await PawAPI.predict(payload);
+            renderCalculationResult(res, payload);
+            if (resultSection) {
+                resultSection.style.display = "block";
+                resultSection.scrollIntoView({ behavior: "smooth" });
+            }
+        } catch (err) {
+            PawAPI.showToast("Our poop detective got distracted. Try again.", "danger");
+        } finally {
+            calcBtn.innerHTML = origBtnText;
+            calcBtn.disabled = false;
+        }
+    };
+}
+
+function renderCalculationResult(res, inputs) {
+    const probEl = document.getElementById("resProbability");
+    const statusEl = document.getElementById("resStatusDesc");
+    const estTimeEl = document.getElementById("resEstimatedTime");
+    const minsEl = document.getElementById("resMinutesRemaining");
+    const confEl = document.getElementById("resConfidence");
+    const takeEl = document.getElementById("resPawPottyTake");
+    const actionEl = document.getElementById("resRecommendedAction");
+    const factorsGrid = document.getElementById("resFactorsGrid");
+
+    if (probEl) probEl.textContent = `${res.probability}%`;
+
+    if (statusEl) {
+        if (res.probability >= 85) statusEl.textContent = "Pretty suspicious. 👀";
+        else if (res.probability >= 65) statusEl.textContent = "Getting warmed up. 🐾";
+        else statusEl.textContent = "Looking relaxed and chill. 🛋️";
+    }
+
+    if (estTimeEl && res.predicted_time) {
+        const timeStr = new Date(res.predicted_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        estTimeEl.textContent = timeStr;
+    }
+
+    if (minsEl) minsEl.textContent = `~${res.minutes_until} minutes`;
+    if (confEl) confEl.textContent = `${res.confidence}%`;
+    if (takeEl) takeEl.textContent = `"${res.explanation}"`;
+    if (actionEl) actionEl.textContent = res.recommended_action;
+
+    // Render Factor Cards
+    if (factorsGrid) {
+        const hrsGap = res.hours_since_potty ? `${res.hours_since_potty.toFixed(1)}h` : "3.5h";
+        factorsGrid.innerHTML = `
+            <div class="factor-card">
+                <div class="factor-card-icon">💧</div>
+                <div class="factor-card-title">Water</div>
+                <div class="factor-card-value">${inputs.water}</div>
+            </div>
+            <div class="factor-card">
+                <div class="factor-card-icon">🏃</div>
+                <div class="factor-card-title">Activity</div>
+                <div class="factor-card-value">${inputs.activity_level}</div>
+            </div>
+            <div class="factor-card">
+                <div class="factor-card-icon">⏰</div>
+                <div class="factor-card-title">Potty Gap</div>
+                <div class="factor-card-value">${hrsGap}</div>
+            </div>
+            <div class="factor-card">
+                <div class="factor-card-icon">😏</div>
+                <div class="factor-card-title">Mood</div>
+                <div class="factor-card-value">${inputs.mood}</div>
+            </div>
+            <div class="factor-card">
+                <div class="factor-card-icon">🐾</div>
+                <div class="factor-card-title">Confidence</div>
+                <div class="factor-card-value">${res.confidence}%</div>
+            </div>
+        `;
+    }
+
+    // Direct Record Break Button
+    const logBtn = document.getElementById("btnRecordFromCalc");
+    if (logBtn && selectedDog) {
+        logBtn.onclick = async () => {
+            try {
+                await PawAPI.logPottyEvent({
+                    dog_id: selectedDog.id,
+                    food: inputs.food,
+                    water: inputs.water,
+                    activity_level: inputs.activity_level,
+                    notes: `Predicted ${res.probability}% at ${new Date(res.predicted_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`
+                });
+                PawAPI.showToast("Case closed! Actual potty break recorded. 💩", "success");
+            } catch (e) {
+                PawAPI.showToast("Could not record potty break", "danger");
+            }
+        };
+    }
+}
+
+document.addEventListener("DOMContentLoaded", initCalculator);

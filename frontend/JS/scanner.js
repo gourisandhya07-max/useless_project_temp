@@ -1,450 +1,293 @@
-const video = document.getElementById("camera");
-const startButton = document.getElementById("startCamera");
-const stopButton = document.getElementById("stopCamera");
-const scanButton = document.getElementById("scanNow");
-const status = document.getElementById("scannerStatus");
-const resultBox = document.getElementById("visionResult");
+// PawPotty AI Scanner Controller
+// WebRTC Camera + Canvas Throttling + Telemetry & Alerts
 
-let stream = null;
-let scanInterval = null;
-let isAnalyzing = false;
+let cameraStream = null;
+let scannerInterval = null;
+let isScanning = false;
+let activeDogId = null;
+let lastMovementVal = 0.0;
+let alertSoundPlayedForSession = false;
 
+async function initScanner() {
+    activeDogId = PawAPI.getActiveDogId();
+    setupScannerUI();
+    await checkScannerCapabilities();
+}
 
-// -----------------------------
-// BUTTON EVENTS
-// -----------------------------
+async function checkScannerCapabilities() {
+    try {
+        const caps = await PawAPI.getScannerCapabilities();
+        const badgeEl = document.getElementById("scannerCapabilityBadge");
+        if (badgeEl) {
+            if (caps.capability_state === "full_ai") {
+                badgeEl.className = "badge badge-success";
+                badgeEl.innerHTML = `<span class="dot dot-green"></span> Full AI (YOLO + Posture)`;
+            } else if (caps.capability_state === "dog_detection") {
+                badgeEl.className = "badge badge-warning";
+                badgeEl.innerHTML = `<span class="dot dot-yellow"></span> Dog Detection (YOLOv8)`;
+            } else {
+                badgeEl.className = "badge badge-neutral";
+                badgeEl.innerHTML = `<span class="dot dot-gray"></span> Experimental (Motion Radar)`;
+            }
+        }
+    } catch (e) {
+        console.warn("Capability check error:", e);
+    }
+}
 
-startButton.addEventListener("click", startCamera);
-stopButton.addEventListener("click", stopCamera);
-scanButton.addEventListener("click", analyzeDog);
+function setupScannerUI() {
+    const startBtn = document.getElementById("btnToggleScanner");
+    if (startBtn) {
+        startBtn.onclick = () => {
+            if (!isScanning) {
+                startScanner();
+            } else {
+                stopScanner();
+            }
+        };
+    }
 
+    const alertCloseBtn = document.getElementById("btnCloseAlertModal");
+    if (alertCloseBtn) {
+        alertCloseBtn.onclick = () => {
+            document.getElementById("pottyAlertModal").style.display = "none";
+        };
+    }
+}
 
-// -----------------------------
-// START CAMERA
-// -----------------------------
-
-async function startCamera() {
+async function startScanner() {
+    const video = document.getElementById("cameraVideo");
+    const placeholder = document.getElementById("scannerPlaceholder");
+    const startBtn = document.getElementById("btnToggleScanner");
+    const statusMsgEl = document.getElementById("scannerStatusMsg");
 
     try {
-
-        if (!navigator.mediaDevices ||
-            !navigator.mediaDevices.getUserMedia) {
-
-            throw new Error("Camera API not supported");
-        }
-
-        stream = await navigator.mediaDevices.getUserMedia({
+        // Request camera access explicitly after click
+        cameraStream = await navigator.mediaDevices.getUserMedia({
             video: {
-                facingMode: "environment",
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: "environment"
             },
             audio: false
         });
 
-        video.srcObject = stream;
+        video.srcObject = cameraStream;
+        await video.play();
 
-        status.textContent =
-            "🟢 Camera active — point it at your dog";
+        isScanning = true;
+        placeholder.style.display = "none";
+        startBtn.className = "btn btn-danger";
+        startBtn.innerHTML = `<span>⏹</span> Stop Scanner`;
 
-        resultBox.innerHTML = `
-            <h3>🐶 Camera Ready</h3>
-            <p>
-                Point the camera at your dog and click
-                <strong>Analyze Dog</strong>.
-            </p>
-        `;
+        if (statusMsgEl) statusMsgEl.textContent = "Watching for suspicious circles...";
+        PawAPI.showToast("Camera active! Sniffing out dog signals... 🐾", "success");
 
-        startButton.disabled = true;
-        stopButton.disabled = false;
-        scanButton.disabled = false;
+        // Start throttled frame processing (approx 3 FPS = every 350ms)
+        scannerInterval = setInterval(captureAndSendFrame, 350);
 
-    } catch (error) {
-
-        console.error(error);
-
-        status.textContent =
-            "❌ Camera permission denied or unavailable";
-
-        resultBox.innerHTML = `
-            <h3>⚠️ Camera unavailable</h3>
-
-            <p>
-                PawPotty couldn't access your camera.
-            </p>
-
-            <p>
-                Don't worry — the normal potty calculator
-                still works without the camera.
-            </p>
-
-            <a href="calculator.html"
-               class="btn primary">
-                💩 Use Calculator
-            </a>
-        `;
+        // Start session on backend
+        await PawAPI.startScanner(activeDogId).catch(() => {});
+    } catch (err) {
+        console.error("Camera access error:", err);
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+            PawAPI.showToast("Camera access is off. No worries — PawPotty can still make a routine-based estimate.", "warning");
+        } else {
+            PawAPI.showToast("We couldn't open the camera. You can still use the calculator.", "warning");
+        }
     }
 }
 
-
-// -----------------------------
-// STOP CAMERA
-// -----------------------------
-
-function stopCamera() {
-
-    if (scanInterval) {
-        clearInterval(scanInterval);
-        scanInterval = null;
+function stopScanner() {
+    isScanning = false;
+    if (scannerInterval) {
+        clearInterval(scannerInterval);
+        scannerInterval = null;
     }
 
-    if (stream) {
-
-        stream
-            .getTracks()
-            .forEach(track => track.stop());
-
-        stream = null;
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
     }
 
-    video.srcObject = null;
+    const video = document.getElementById("cameraVideo");
+    if (video) video.srcObject = null;
 
-    status.textContent = "Camera stopped";
+    const placeholder = document.getElementById("scannerPlaceholder");
+    if (placeholder) placeholder.style.display = "flex";
 
-    startButton.disabled = false;
-    stopButton.disabled = true;
+    const startBtn = document.getElementById("btnToggleScanner");
+    if (startBtn) {
+        startBtn.className = "btn btn-primary";
+        startBtn.innerHTML = `<span>📷</span> Start Scanner`;
+    }
 
-    resultBox.innerHTML = `
-        <h3>📷 Camera stopped</h3>
-        <p>Start the camera whenever you're ready.</p>
-    `;
+    const canvas = document.getElementById("overlayCanvas");
+    if (canvas) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    const targetBadge = document.getElementById("scannerTargetBadge");
+    if (targetBadge) targetBadge.style.display = "none";
+
+    PawAPI.showToast("Scanner paused.", "info");
 }
 
+async function captureAndSendFrame() {
+    if (!isScanning) return;
 
-// -----------------------------
-// ANALYZE CURRENT CAMERA FRAME
-// -----------------------------
+    const video = document.getElementById("cameraVideo");
+    if (!video || video.videoWidth === 0) return;
 
-async function analyzeDog() {
+    // Off-screen canvas to capture snapshot
+    const captureCanvas = document.createElement("canvas");
+    captureCanvas.width = 320;
+    captureCanvas.height = 240;
+    const ctx = captureCanvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
 
-    if (!stream) {
-
-        resultBox.innerHTML = `
-            <h3>⚠️ Camera not started</h3>
-            <p>Start the camera first.</p>
-        `;
-
-        return;
-    }
-
-    if (isAnalyzing) return;
-
-    isAnalyzing = true;
-
-    scanButton.disabled = true;
-
-    status.textContent = "🧠 Analyzing your dog...";
-
-    resultBox.innerHTML = `
-        <div class="loading">
-            <div class="spinner"></div>
-
-            <h3>🤖 AI is looking...</h3>
-
-            <p>
-                Checking for a suspicious amount of dog.
-            </p>
-        </div>
-    `;
-
+    const base64Data = captureCanvas.toDataURL("image/jpeg", 0.65);
 
     try {
+        const telemetry = await PawAPI.sendFrame({
+            dog_id: activeDogId,
+            image_base64: base64Data,
+            previous_movement: lastMovementVal
+        });
 
-        // Make sure video has loaded
-        if (!video.videoWidth || !video.videoHeight) {
+        lastMovementVal = telemetry.movement;
+        updateScannerTelemetry(telemetry);
+    } catch (e) {
+        // Silent catch for network drops during live scan
+    }
+}
 
-            throw new Error(
-                "Camera frame is not ready yet."
-            );
-        }
+function updateScannerTelemetry(data) {
+    const canvas = document.getElementById("overlayCanvas");
+    const video = document.getElementById("cameraVideo");
+    const targetBadge = document.getElementById("scannerTargetBadge");
+    const statusMsgEl = document.getElementById("scannerStatusMsg");
 
+    // Update Status Message
+    if (statusMsgEl && data.status_message) {
+        statusMsgEl.textContent = data.status_message;
+    }
 
-        // Create canvas
-        const canvas =
-            document.createElement("canvas");
+    // Telemetry Meters
+    const restlessFill = document.getElementById("meterRestlessnessFill");
+    const restlessText = document.getElementById("meterRestlessnessText");
+    const moveFill = document.getElementById("meterMovementFill");
+    const moveText = document.getElementById("meterMovementText");
+    const radarFill = document.getElementById("meterRadarFill");
+    const radarText = document.getElementById("meterRadarText");
 
-        canvas.width =
-            video.videoWidth;
+    const rPercent = Math.round(data.restlessness * 100);
+    const mPercent = Math.round(data.movement * 100);
+    const pPercent = data.potty_probability;
 
-        canvas.height =
-            video.videoHeight;
+    if (restlessFill) {
+        restlessFill.style.width = `${rPercent}%`;
+        restlessFill.style.background = rPercent > 65 ? "var(--warning)" : "var(--primary)";
+    }
+    if (restlessText) restlessText.textContent = `${rPercent}%`;
 
+    if (moveFill) {
+        moveFill.style.width = `${mPercent}%`;
+        moveFill.style.background = mPercent > 65 ? "var(--warning)" : "var(--primary)";
+    }
+    if (moveText) moveText.textContent = `${mPercent}%`;
 
-        const context =
-            canvas.getContext("2d");
+    if (radarFill) {
+        radarFill.style.width = `${pPercent}%`;
+        radarFill.style.background = pPercent > 80 ? "var(--danger)" : (pPercent > 60 ? "var(--accent)" : "var(--primary)");
+    }
+    if (radarText) radarText.textContent = `${pPercent}%`;
 
-        context.drawImage(
-            video,
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
+    // Overlay Canvas Rendering (Bounding Boxes)
+    if (canvas && video) {
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        if (data.dog_detected && data.bounding_boxes && data.bounding_boxes.length > 0) {
+            if (targetBadge) {
+                targetBadge.style.display = "flex";
+                targetBadge.innerHTML = `<span>🐶</span> Dog Detected`;
+            }
 
-        // Convert image to Blob
-        const blob =
-            await new Promise(resolve => {
+            // Draw bounding boxes scaled to video dimensions
+            data.bounding_boxes.forEach(box => {
+                const scaleX = canvas.width / 320;
+                const scaleY = canvas.height / 240;
+                const bx = (box.x - box.width / 2) * scaleX;
+                const by = (box.y - box.height / 2) * scaleY;
+                const bw = box.width * scaleX;
+                const bh = box.height * scaleY;
 
-                canvas.toBlob(
-                    resolve,
-                    "image/jpeg",
-                    0.85
-                );
+                ctx.strokeStyle = "#6FAF72";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(bx, by, bw, bh);
 
+                // Label tag
+                ctx.fillStyle = "rgba(111, 175, 114, 0.9)";
+                ctx.fillRect(bx, by - 24, 90, 24);
+                ctx.fillStyle = "#FFFFFF";
+                ctx.font = "bold 12px sans-serif";
+                ctx.fillText(`Dog ${(box.confidence * 100).toFixed(0)}%`, bx + 6, by - 7);
             });
-
-
-        if (!blob) {
-            throw new Error(
-                "Could not capture camera image."
-            );
+        } else {
+            if (targetBadge) targetBadge.style.display = "none";
         }
+    }
 
-
-        // Send image to backend
-        const formData =
-            new FormData();
-
-        formData.append(
-            "file",
-            blob,
-            "dog.jpg"
-        );
-
-
-        const response =
-            await fetch(
-                `${API_URL}/api/scanner/analyze`,
-                {
-                    method: "POST",
-                    body: formData
-                }
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Scanner API request failed."
-            );
-        }
-
-
-        const data =
-            await response.json();
-
-
-        displayScannerResult(data);
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        status.textContent =
-            "⚠️ Scanner error";
-
-        resultBox.innerHTML = `
-            <h3>⚠️ AI Scanner unavailable</h3>
-
-            <p>
-                Something went wrong while analyzing
-                the camera image.
-            </p>
-
-            <p>
-                Switching to routine-based prediction.
-            </p>
-
-            <a href="calculator.html"
-               class="btn primary">
-                💩 Calculate Potty Time
-            </a>
-        `;
-
-    } finally {
-
-        isAnalyzing = false;
-
-        scanButton.disabled = false;
+    // Check alert threshold
+    const threshold = parseInt(localStorage.getItem("pawpotty_alert_threshold") || "85", 10);
+    if (pPercent >= threshold && !alertSoundPlayedForSession) {
+        triggerPottyAlertModal(pPercent, data.estimated_minutes);
     }
 }
 
+function triggerPottyAlertModal(prob, minutes) {
+    const modal = document.getElementById("pottyAlertModal");
+    const probEl = document.getElementById("alertModalProb");
+    const estEl = document.getElementById("alertModalEst");
 
-// -----------------------------
-// DISPLAY SCANNER RESULT
-// -----------------------------
+    if (probEl) probEl.textContent = `${prob}%`;
+    if (estEl) estEl.textContent = `~${minutes} minutes`;
+    if (modal) modal.style.display = "flex";
 
-function displayScannerResult(data) {
+    alertSoundPlayedForSession = true;
 
-    if (!data.available) {
-
-        status.textContent =
-            "⚠️ AI Scanner unavailable";
-
-        resultBox.innerHTML = `
-            <div class="scanner-warning">
-
-                <h3>
-                    ⚠️ AI Scanner unavailable
-                </h3>
-
-                <p>
-                    YOLO could not be loaded.
-                    Switching to routine-based prediction.
-                </p>
-
-                <a href="calculator.html"
-                   class="btn primary">
-                    💩 Use Calculator
-                </a>
-
-            </div>
-        `;
-
-        return;
+    // Play chime if enabled
+    if (localStorage.getItem("pawpotty_sound_enabled") !== "false") {
+        playChime();
     }
 
-
-    status.textContent =
-        data.dog_detected
-            ? "🟢 Dog detected"
-            : "🟡 Looking for a dog...";
-
-
-    const dogStatus =
-        data.dog_detected
-            ? "🐶 Dog detected!"
-            : "🔎 No dog detected";
-
-
-    const dogCount =
-        Number(data.dog_count || 0);
-
-
-    const restlessness =
-        data.restlessness
-            ? "High"
-            : "Not detected";
-
-
-    const circling =
-        data.circling
-            ? "Detected"
-            : "Not detected";
-
-
-    const squatting =
-        data.squatting
-            ? "Detected"
-            : "Not detected";
-
-
-    resultBox.innerHTML = `
-
-        <div class="scanner-result">
-
-            <h2>${dogStatus}</h2>
-
-            <div class="vision-grid">
-
-                <div class="vision-item">
-                    <span>🐶</span>
-                    <small>Dogs detected</small>
-                    <strong>${dogCount}</strong>
-                </div>
-
-
-                <div class="vision-item">
-                    <span>🏃</span>
-                    <small>Restlessness</small>
-                    <strong>${restlessness}</strong>
-                </div>
-
-
-                <div class="vision-item">
-                    <span>🔄</span>
-                    <small>Circling</small>
-                    <strong>${circling}</strong>
-                </div>
-
-
-                <div class="vision-item">
-                    <span>🧎</span>
-                    <small>Squatting</small>
-                    <strong>${squatting}</strong>
-                </div>
-
-            </div>
-
-
-            ${
-                dogCount > 1
-                ? `
-                    <div class="scanner-warning">
-                        ⚠️ Multiple dogs detected.
-                        Make sure you're analyzing the correct dog.
-                    </div>
-                `
-                : ""
-            }
-
-
-            ${
-                data.dog_detected
-                ? `
-                    <div class="scanner-success">
-
-                        <h3>
-                            🧠 Behavioral Analysis
-                        </h3>
-
-                        <p>
-                            ${
-                                data.message ||
-                                "Dog detected successfully."
-                            }
-                        </p>
-
-                    </div>
-                `
-                : `
-                    <div class="scanner-warning">
-
-                        <p>
-                            🐕 No dog detected in this frame.
-                        </p>
-
-                        <p>
-                            Try moving the camera closer
-                            or changing the angle.
-                        </p>
-
-                    </div>
-                `
-            }
-
-        </div>
-    `;
+    // Trigger browser notification if granted
+    if (Notification.permission === "granted" && localStorage.getItem("pawpotty_notifs_enabled") === "true") {
+        new Notification("🚨 PawPotty Alert!", {
+            body: `Your pup's potty radar is at ${prob}%! Estimated time: ~${minutes} minutes.`,
+            icon: "/favicon.ico"
+        });
+    }
 }
 
+function playChime() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.exponentialRampToValueAtTime(880.00, audioCtx.currentTime + 0.3); // A5
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.9);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.95);
+    } catch (e) {}
+}
 
-// -----------------------------
-// CLEANUP WHEN LEAVING PAGE
-// -----------------------------
-
-window.addEventListener(
-    "beforeunload",
-    stopCamera
-);
+document.addEventListener("DOMContentLoaded", initScanner);

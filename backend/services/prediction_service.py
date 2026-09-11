@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, Optional, List
 
 
 ACTIVITY_SCORES = {
@@ -12,139 +13,169 @@ MOOD_SCORES = {
     "Happy": 3,
     "Excited": 8,
     "Restless": 18,
-    "Sleepy": -3,
-    "Suspicious 😂": 15
+    "Sleepy": -5,
+    "Suspicious 😂": 16,
+    "Suspicious": 16
+}
+
+WATER_SCORES = {
+    "Low": 2,
+    "Moderate": 8,
+    "High": 16
 }
 
 
 def calculate_prediction(
-    age,
-    weight,
-    food,
-    water,
-    activity_level,
-    mood,
-    last_potty_time,
-    vision=None
-):
+    age: Optional[float] = 2.0,
+    weight: Optional[float] = 20.0,
+    food: Optional[str] = "Standard Kibble",
+    water: Optional[str] = "Moderate",
+    activity_level: Optional[str] = "Moderate",
+    mood: Optional[str] = "Calm",
+    last_potty_time: Optional[Any] = None,
+    vision: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """
-    Fun/experimental prediction engine.
-
-    This is NOT a veterinary model.
+    Transparent, deterministic prediction heuristic for PawPotty.
+    This is an experimental/fun estimator, NOT a medical or veterinary algorithm.
     """
-
     now = datetime.now(timezone.utc)
 
+    # Parse last potty time
     if last_potty_time:
         if isinstance(last_potty_time, str):
-            last_potty_time = datetime.fromisoformat(
-                last_potty_time.replace("Z", "+00:00")
-            )
+            try:
+                clean_time = last_potty_time.replace("Z", "+00:00")
+                last_potty_dt = datetime.fromisoformat(clean_time)
+            except Exception:
+                last_potty_dt = now - timedelta(hours=3)
+        elif isinstance(last_potty_time, datetime):
+            last_potty_dt = last_potty_time
+        else:
+            last_potty_dt = now - timedelta(hours=3)
 
-        if last_potty_time.tzinfo is None:
-            last_potty_time = last_potty_time.replace(tzinfo=timezone.utc)
+        if last_potty_dt.tzinfo is None:
+            last_potty_dt = last_potty_dt.replace(tzinfo=timezone.utc)
 
-        hours_since_potty = (
-            now - last_potty_time
-        ).total_seconds() / 3600
-
+        hours_since_potty = max(0.05, (now - last_potty_dt).total_seconds() / 3600.0)
     else:
-        hours_since_potty = 3
+        hours_since_potty = 3.5
 
-    score = 20
+    score = 15.0  # Base baseline
+    factors: List[str] = []
 
-    factors = []
+    # 1. Time since last potty break
+    # Typical adult dogs need breaks every 4-6 hours, puppies/seniors sooner
+    time_multiplier = 8.5
+    if age and (age < 1.0 or age > 10.0):
+        time_multiplier = 10.5  # Younger or older pups need more frequent breaks
 
-    # Time factor
-    time_score = min(hours_since_potty * 8, 35)
+    time_score = min(hours_since_potty * time_multiplier, 40.0)
     score += time_score
 
-    if hours_since_potty >= 4:
-        factors.append(
-            f"{hours_since_potty:.1f} hours since the last potty"
-        )
+    if hours_since_potty >= 4.0:
+        factors.append(f"⏰ {hours_since_potty:.1f}h since last break (potty gap getting wide)")
+    elif hours_since_potty >= 2.5:
+        factors.append(f"⏰ {hours_since_potty:.1f}h since last break")
 
-    # Activity
-    activity_score = ACTIVITY_SCORES.get(activity_level, 10)
-    score += activity_score
-
+    # 2. Activity Level
+    act_score = ACTIVITY_SCORES.get(activity_level, 10)
+    score += act_score
     if activity_level == "High":
-        factors.append("High activity level")
+        factors.append("🏃 High activity level (zoomies stimulate the digestion)")
+    elif activity_level == "Moderate":
+        factors.append("🏃 Moderate afternoon activity")
 
-    # Mood
-    mood_score = MOOD_SCORES.get(mood, 0)
-    score += mood_score
-
-    if mood in ["Restless", "Suspicious 😂"]:
-        factors.append(f"{mood} behavior")
-
-    # Water
-    try:
-        water_value = float(water or 0)
-    except (TypeError, ValueError):
-        water_value = 0
-
-    water_score = min(water_value * 2, 15)
-    score += water_score
-
-    if water_value > 2:
-        factors.append("Higher reported water consumption")
-
-    # Vision signals
-    vision = vision or {}
-
-    if vision.get("dog_detected"):
-        score += 5
-        factors.append("Dog detected by camera")
-
-    if vision.get("restlessness"):
-        score += 15
-        factors.append("Camera detected increased movement")
-
-    if vision.get("circling"):
-        score += 20
-        factors.append("Possible circling behavior detected")
-
-    if vision.get("squatting"):
-        score += 30
-        factors.append("Possible squatting posture detected")
-
-    # Clamp probability
-    probability = max(1, min(round(score), 99))
-
-    # Estimate minutes
-    if probability >= 90:
-        minutes = 8
-    elif probability >= 80:
-        minutes = 15
-    elif probability >= 70:
-        minutes = 25
-    elif probability >= 60:
-        minutes = 40
-    elif probability >= 50:
-        minutes = 60
+    # 3. Water & Hydration
+    if isinstance(water, str) and water in WATER_SCORES:
+        w_score = WATER_SCORES[water]
     else:
-        minutes = 90
+        try:
+            num_w = float(water or 0)
+            w_score = min(num_w * 4.0, 16.0)
+        except (ValueError, TypeError):
+            w_score = 8.0
+
+    score += w_score
+    if w_score >= 14:
+        factors.append("💧 High water bowl intake detected")
+    elif w_score >= 8:
+        factors.append("💧 Standard hydration level")
+
+    # 4. Mood & Disposition
+    m_score = MOOD_SCORES.get(mood, 4)
+    score += m_score
+    if mood in ["Restless", "Suspicious 😂", "Suspicious"]:
+        factors.append(f"😏 {mood} vibes (classic pre-potty restlessness)")
+    elif mood == "Excited":
+        factors.append("✨ Excited and alert energy")
+
+    # 5. Vision / Camera signals (if available)
+    if vision:
+        if vision.get("dog_detected"):
+            score += 4.0
+            factors.append("● Dog detected in camera frame")
+
+        restlessness = vision.get("restlessness", 0.0)
+        if isinstance(restlessness, (int, float)) and restlessness > 0.6:
+            score += 12.0
+            factors.append(f"🐾 High restlessness signal ({int(restlessness * 100)}%)")
+
+        movement = vision.get("movement", 0.0)
+        if isinstance(movement, (int, float)) and movement > 0.65:
+            score += 8.0
+            factors.append("📹 Pacing / frequent movement in view")
+
+        if vision.get("circling"):
+            score += 18.0
+            factors.append("🔄 Suspicious tight circling movement detected!")
+
+        if vision.get("squatting"):
+            score += 30.0
+            factors.append("🚨 Squat posture detected — immediate potty alert!")
+
+        posture = vision.get("posture")
+        if posture == "sniffing_ground":
+            score += 10.0
+            factors.append("👃 Intense ground-sniffing behavior")
+
+    # Probability clamp (1% to 99%)
+    probability = int(max(1, min(round(score), 99)))
+
+    # Estimate minutes remaining
+    if probability >= 92:
+        minutes = 5
+    elif probability >= 85:
+        minutes = 12
+    elif probability >= 75:
+        minutes = 20
+    elif probability >= 65:
+        minutes = 35
+    elif probability >= 50:
+        minutes = 55
+    elif probability >= 35:
+        minutes = 80
+    else:
+        minutes = 120
 
     predicted_time = now + timedelta(minutes=minutes)
 
-    confidence = min(
-        95,
-        max(
-            35,
-            50 + len(factors) * 8
-        )
-    )
+    # Confidence calculation: grows with known data points
+    factor_count = len(factors)
+    confidence = int(min(96, max(42, 50 + factor_count * 7)))
 
     if not factors:
-        factors.append("Routine-based estimate")
+        factors.append("🐾 Routine baseline estimate")
 
+    # Recommended action
     if probability >= 85:
-        action = "Get ready for a possible potty trip!"
-    elif probability >= 65:
-        action = "Keep an eye on your dog."
+        recommended_action = "Leash up now! A prompt potty trip is highly recommended. 🐕💩"
+    elif probability >= 70:
+        recommended_action = "Keep one eye on the door — a short walk wouldn't be a bad idea. 👀"
+    elif probability >= 50:
+        recommended_action = "Pup is entering the warmup phase. Plan a break in the next hour."
     else:
-        action = "Probably safe to relax for now."
+        recommended_action = "Your pup looks pretty relaxed right now. No emergency potty vibes detected. 🛋️"
 
     return {
         "probability": probability,
@@ -152,7 +183,6 @@ def calculate_prediction(
         "minutes_until": minutes,
         "predicted_time": predicted_time.isoformat(),
         "factors": factors,
-        "recommended_action": action,
+        "recommended_action": recommended_action,
         "hours_since_potty": round(hours_since_potty, 2)
     }
-  
