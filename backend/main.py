@@ -69,6 +69,35 @@ def health_check():
 
 # Static Frontend Files Serving
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+
+# Always provide a stable root fallback so the app does not return a 404 from
+# a missing frontend mount when the container image omits the public directory.
+@app.get("/")
+def serve_index():
+    if frontend_dir.exists():
+        index_file = frontend_dir / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
+    return JSONResponse(status_code=200, content={
+        "message": "PawPotty API is running. Frontend index.html not found."
+    })
+
+@app.get("/{page}.html")
+def serve_html_page(page: str):
+    if frontend_dir.exists():
+        page_file = frontend_dir / f"{page}.html"
+        if page_file.exists():
+            return FileResponse(str(page_file))
+    return JSONResponse(status_code=404, content={"message": f"Page {page}.html not found."})
+
+@app.get("/{page}")
+def serve_html_page_clean(page: str):
+    if frontend_dir.exists():
+        page_file = frontend_dir / f"{page}.html"
+        if page_file.exists():
+            return FileResponse(str(page_file))
+    return JSONResponse(status_code=404, content={"message": f"Page {page} not found."})
+
 if frontend_dir.exists():
     # Mount css and js with case-insensitivity support for Linux containers
     css_dir = frontend_dir / "css" if (frontend_dir / "css").exists() else frontend_dir / "CSS"
@@ -80,28 +109,6 @@ if frontend_dir.exists():
     if js_dir.exists():
         app.mount("/js", StaticFiles(directory=str(js_dir)), name="js")
         app.mount("/JS", StaticFiles(directory=str(js_dir)), name="js_upper")
-
-    # Serve HTML pages directly
-    @app.get("/")
-    def serve_index():
-        index_file = frontend_dir / "index.html"
-        if index_file.exists():
-            return FileResponse(str(index_file))
-        return {"message": "PawPotty API is running. Frontend index.html not found."}
-
-    @app.get("/{page}.html")
-    def serve_html_page(page: str):
-        page_file = frontend_dir / f"{page}.html"
-        if page_file.exists():
-            return FileResponse(str(page_file))
-        return JSONResponse(status_code=404, content={"message": f"Page {page}.html not found."})
-
-    @app.get("/{page}")
-    def serve_html_page_clean(page: str):
-        page_file = frontend_dir / f"{page}.html"
-        if page_file.exists():
-            return FileResponse(str(page_file))
-        return JSONResponse(status_code=404, content={"message": f"Page {page} not found."})
 
 
 @app.exception_handler(Exception)
