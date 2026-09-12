@@ -1,9 +1,15 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Ensure backend directory is in sys.path so imports work regardless of working directory
+backend_dir = Path(__file__).resolve().parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
 # Load .env if present
-env_path = Path(__file__).resolve().parent / ".env"
+env_path = backend_dir / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 else:
@@ -64,13 +70,16 @@ def health_check():
 # Static Frontend Files Serving
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 if frontend_dir.exists():
-    # Mount css and js
-    css_dir = frontend_dir / "css"
-    js_dir = frontend_dir / "js"
+    # Mount css and js with case-insensitivity support for Linux containers
+    css_dir = frontend_dir / "css" if (frontend_dir / "css").exists() else frontend_dir / "CSS"
+    js_dir = frontend_dir / "js" if (frontend_dir / "js").exists() else frontend_dir / "JS"
+
     if css_dir.exists():
         app.mount("/css", StaticFiles(directory=str(css_dir)), name="css")
+        app.mount("/CSS", StaticFiles(directory=str(css_dir)), name="css_upper")
     if js_dir.exists():
         app.mount("/js", StaticFiles(directory=str(js_dir)), name="js")
+        app.mount("/JS", StaticFiles(directory=str(js_dir)), name="js_upper")
 
     # Serve HTML pages directly
     @app.get("/")
@@ -87,6 +96,13 @@ if frontend_dir.exists():
             return FileResponse(str(page_file))
         return JSONResponse(status_code=404, content={"message": f"Page {page}.html not found."})
 
+    @app.get("/{page}")
+    def serve_html_page_clean(page: str):
+        page_file = frontend_dir / f"{page}.html"
+        if page_file.exists():
+            return FileResponse(str(page_file))
+        return JSONResponse(status_code=404, content={"message": f"Page {page} not found."})
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -102,4 +118,5 @@ async def global_exception_handler(request: Request, exc: Exception):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
+    is_dev = os.getenv("RAILWAY_ENVIRONMENT") is None  # False on Railway
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=is_dev)

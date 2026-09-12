@@ -16,3 +16,9 @@ backend/pawpotty.db
 # OS
 .DS_Store
 Thumbs.db
+
+# YOLO model files (auto-downloaded on first run, do not commit)
+*.pt
+*.onnx
+*.torchscript
+backend/runs/

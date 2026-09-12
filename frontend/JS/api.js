@@ -1,8 +1,17 @@
 // PawPotty API Client & Common Utilities
 
-const API_BASE = window.location.origin.includes("localhost") || window.location.origin.includes("127.0.0.1")
-    ? "" // Same origin when served by FastAPI
-    : "http://127.0.0.1:8000";
+// Optional override for custom backend URL (leave empty when deploying with FastAPI on Railway/Render)
+const DEPLOYED_BACKEND_URL = "";
+
+// When served over HTTP/HTTPS (whether localhost, custom domain, or Railway's *.up.railway.app),
+// use same-origin relative URLs ("") so browser requests automatically route to the FastAPI server.
+// Only fall back to http://127.0.0.1:8000 when the HTML files are opened directly from disk via file:// protocol.
+const API_BASE = DEPLOYED_BACKEND_URL
+    ? DEPLOYED_BACKEND_URL.replace(/\/+$/, "")
+    : (window.location.protocol.startsWith("http")
+        ? ""
+        : "http://127.0.0.1:8000");
+
 
 const PawAPI = {
     getToken() {

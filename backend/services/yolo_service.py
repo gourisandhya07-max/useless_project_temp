@@ -1,6 +1,7 @@
 import os
 import io
 import base64
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from PIL import Image
 
@@ -18,8 +19,15 @@ try:
     YOLO_AVAILABLE = True
     # Attempt to load standard YOLOv8n for COCO dog detection
     try:
-        # Standard lightweight model
-        yolo_model = YOLO("yolov8n.pt")
+        # Standard lightweight model (search backend/yolov8n.pt and root/yolov8n.pt)
+        backend_dir = Path(__file__).resolve().parent.parent
+        candidates = [
+            backend_dir / "yolov8n.pt",
+            Path("yolov8n.pt"),
+            Path("backend/yolov8n.pt")
+        ]
+        chosen_path = next((str(p) for p in candidates if p.exists()), "yolov8n.pt")
+        yolo_model = YOLO(chosen_path)
     except Exception as e:
         # If download or model load fails, keep as None
         yolo_model = None
