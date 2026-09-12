@@ -1,6 +1,26 @@
 import pytest
+import builtins
+import importlib
 from datetime import datetime, timezone, timedelta
 from services.prediction_service import calculate_prediction
+import services.yolo_service as yolo_service
+
+
+def test_yolo_service_handles_non_import_errors(monkeypatch):
+    """The optional YOLO dependency must degrade safely for any import-time exception, not just ImportError."""
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "ultralytics":
+            raise RuntimeError("simulated optional YOLO import failure")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    reloaded = importlib.reload(yolo_service)
+
+    caps = reloaded.get_yolo_capabilities()
+    assert caps["yolo_available"] is False
+    assert caps["capability_state"] == "experimental"
 
 
 def test_prediction_clamping():

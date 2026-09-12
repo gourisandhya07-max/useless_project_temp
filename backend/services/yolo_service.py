@@ -28,7 +28,7 @@ try:
         ]
         chosen_path = next((str(p) for p in candidates if p.exists()), "yolov8n.pt")
         yolo_model = YOLO(chosen_path)
-    except Exception as e:
+    except Exception:
         # If download or model load fails, keep as None
         yolo_model = None
 
@@ -38,9 +38,14 @@ try:
             CUSTOM_MODEL_AVAILABLE = True
         except Exception:
             custom_posture_model = None
-except ImportError:
-    # PyTorch/Ultralytics not installed or not supported in this Python build
+except Exception:
+    # PyTorch/Ultralytics not installed or not supported in this Python build,
+    # or the optional dependency crashed during import for any reason.
+    # Keep the API service alive and return the experimental fallback UI.
     YOLO_AVAILABLE = False
+    CUSTOM_MODEL_AVAILABLE = False
+    yolo_model = None
+    custom_posture_model = None
 
 
 def decode_image_base64(image_base64: str) -> Optional[Image.Image]:
