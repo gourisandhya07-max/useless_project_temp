@@ -129,10 +129,8 @@ const PawAPI = {
     },
 
     async startScanner(dogId) {
-        return this.request("/api/scanner/start", {
-            method: "POST",
-            body: JSON.stringify({ dog_id: dogId })
-        });
+        const query = dogId ? `?dog_id=${encodeURIComponent(dogId)}` : "";
+        return this.request(`/api/scanner/start${query}`, { method: "POST" });
     },
 
     async sendFrame(frameData) {

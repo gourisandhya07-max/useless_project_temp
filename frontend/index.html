@@ -127,8 +127,11 @@
             <div class="brand-name">PawPotty <span class="brand-badge">BETA</span></div>
         </div>
         <div style="display: flex; gap: 12px; align-items: center;">
+            <a href="calculator.html" class="btn btn-secondary btn-sm">💩 Calculate</a>
+            <a href="history.html" class="btn btn-secondary btn-sm">🕐 History</a>
+            <a href="settings.html" class="btn btn-secondary btn-sm">⚙️ Settings</a>
             <a href="scanner.html" class="btn btn-secondary btn-sm">📷 Live Scanner</a>
-            <button onclick="openAuthModal()" class="btn btn-primary btn-sm">Sign In / Demo</button>
+            <a href="dashboard.html" class="btn btn-primary btn-sm">Open PawPotty</a>
         </div>
     </header>
 
@@ -146,9 +149,7 @@
                     An experimental AI potty radar that combines your dog's routine, potty history, and real-time behavior to make a playful guess about when they might need to go.
                 </p>
                 <div class="hero-cta-group">
-                    <button onclick="openAuthModal()" class="btn btn-primary btn-lg">
-                        Get Started Free 🐶
-                    </button>
+                    <a href="dashboard.html" class="btn btn-primary btn-lg">Open Your Radar 🐶</a>
                     <a href="scanner.html" class="btn btn-secondary btn-lg">
                         Try AI Scanner 📷
                     </a>
@@ -210,8 +211,8 @@
                 <div class="journey-grid">
                     <div class="journey-card">
                         <div class="journey-step-num">1</div>
-                        <h3>Profile</h3>
-                        <p class="text-sm" style="margin-top: 8px;">Record your dog's breed, meals, water bowl habits, and baseline energy levels.</p>
+                        <h3>Explore</h3>
+                        <p class="text-sm" style="margin-top: 8px;">Open the dashboard and see the current potty radar at a glance.</p>
                     </div>
                     <div class="journey-card">
                         <div class="journey-step-num">2</div>
@@ -243,99 +244,7 @@
         </div>
     </footer>
 
-    <!-- Auth Modal -->
-    <div id="authModal" class="potty-alert-overlay">
-        <div class="card" style="max-width: 420px; width: 100%; padding: 32px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="brand-icon" style="width: 32px; height: 32px; font-size: 18px;">🐾</div>
-                    <h3 id="authModalTitle">Welcome to PawPotty</h3>
-                </div>
-                <button onclick="closeAuthModal()" style="font-size: 20px; color: var(--text-muted);">&times;</button>
-            </div>
-
-            <p class="text-sm" style="margin-bottom: 20px;">Sign in with Supabase or jump in with our instant 1-click pack demo!</p>
-
-            <form id="authForm" onsubmit="handleAuthSubmit(event)">
-                <div class="form-group" id="nameGroup" style="display: none;">
-                    <label class="form-label">Full Name</label>
-                    <input type="text" id="authName" class="form-control" placeholder="Alex Taylor">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Email Address</label>
-                    <input type="email" id="authEmail" class="form-control" placeholder="alex@pawpotty.app" value="alex@pawpotty.app">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Password</label>
-                    <input type="password" id="authPassword" class="form-control" placeholder="••••••••" value="password123">
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 24px;">
-                    <button type="submit" class="btn btn-primary" id="btnSubmitAuth">
-                        Sign In 🐾
-                    </button>
-                    <button type="button" onclick="handleDemoClick()" class="btn btn-secondary">
-                        ⚡ 1-Click Instant Demo (Skip Login)
-                    </button>
-                </div>
-            </form>
-
-            <div style="margin-top: 18px; text-align: center;">
-                <a href="#" onclick="toggleAuthMode(event)" id="toggleAuthModeLink" class="text-sm" style="color: var(--primary-dark); font-weight: 600;">
-                    Need an account? Sign Up
-                </a>
-            </div>
-        </div>
-    </div>
-
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/api.js"></script>
-    <script src="js/auth.js"></script>
-    <script>
-        let isSignUp = false;
-
-        function openAuthModal() {
-            document.getElementById("authModal").style.display = "flex";
-        }
-
-        function closeAuthModal() {
-            document.getElementById("authModal").style.display = "none";
-        }
-
-        function toggleAuthMode(e) {
-            e.preventDefault();
-            isSignUp = !isSignUp;
-            document.getElementById("authModalTitle").textContent = isSignUp ? "Create Your Pack 🐶" : "Welcome to PawPotty";
-            document.getElementById("nameGroup").style.display = isSignUp ? "block" : "none";
-            document.getElementById("btnSubmitAuth").textContent = isSignUp ? "Create Account 🐾" : "Sign In 🐾";
-            document.getElementById("toggleAuthModeLink").textContent = isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up";
-        }
-
-        async function handleAuthSubmit(e) {
-            e.preventDefault();
-            const email = document.getElementById("authEmail").value.trim();
-            const password = document.getElementById("authPassword").value;
-            const fullName = document.getElementById("authName").value.trim();
-
-            try {
-                if (isSignUp) {
-                    await PawAuth.signUp(email, password, fullName);
-                    PawAPI.showToast("Account created! Welcome to PawPotty 🐾", "success");
-                } else {
-                    await PawAuth.signIn(email, password);
-                    PawAPI.showToast("Welcome back! 🐶", "success");
-                }
-                setTimeout(() => window.location.href = "dashboard.html", 400);
-            } catch (err) {
-                PawAPI.showToast(err.message || "Authentication failed. Try demo mode!", "danger");
-            }
-        }
-
-        async function handleDemoClick() {
-            await PawAuth.signInDemo();
-            window.location.href = "dashboard.html";
-        }
-    </script>
 </body>
 </html>

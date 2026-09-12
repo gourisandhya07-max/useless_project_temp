@@ -148,26 +148,33 @@ def process_scanner_frame(
     else:
         status_message = "Where's the pup? We can't sniff out a dog in frame yet."
 
-    # 5. Compute Prediction with Vision Signals
-    dog_profile = dog_profile or {}
-    prediction = calculate_prediction(
-        age=dog_profile.get("age", 2.5),
-        weight=dog_profile.get("weight", 20.0),
-        food=dog_profile.get("food", "Kibble"),
-        water=dog_profile.get("water_consumption", "Moderate"),
-        activity_level=dog_profile.get("activity_level", "Moderate"),
-        mood=dog_profile.get("current_mood", "Calm"),
-        last_potty_time=dog_profile.get("last_potty_time"),
-        vision={
-            "dog_detected": dog_detected,
-            "movement": movement,
-            "restlessness": restlessness,
-            "circling": circling,
-            "squatting": squatting,
-            "posture": posture,
-            "facial_signal": facial_signal
-        }
-    )
+    # 5. Only score potty signals when the frame contains a dog. Motion in an
+    # empty frame must not look like a potty prediction.
+    if not dog_detected:
+        potty_probability = 25
+        estimated_minutes = 60
+    else:
+        dog_profile = dog_profile or {}
+        prediction = calculate_prediction(
+            age=dog_profile.get("age", 2.5),
+            weight=dog_profile.get("weight", 20.0),
+            food=dog_profile.get("food", "Kibble"),
+            water=dog_profile.get("water_consumption", "Moderate"),
+            activity_level=dog_profile.get("activity_level", "Moderate"),
+            mood=dog_profile.get("current_mood", "Calm"),
+            last_potty_time=dog_profile.get("last_potty_time"),
+            vision={
+                "dog_detected": True,
+                "movement": movement,
+                "restlessness": restlessness,
+                "circling": circling,
+                "squatting": squatting,
+                "posture": posture,
+                "facial_signal": facial_signal
+            }
+        )
+        potty_probability = prediction["probability"]
+        estimated_minutes = prediction["minutes_until"]
 
     return {
         "dog_detected": dog_detected,
@@ -181,6 +188,6 @@ def process_scanner_frame(
         "facial_signal": facial_signal,
         "capability_state": capability_state,
         "status_message": status_message,
-        "potty_probability": prediction["probability"],
-        "estimated_minutes": prediction["minutes_until"]
+        "potty_probability": potty_probability,
+        "estimated_minutes": estimated_minutes
     }
