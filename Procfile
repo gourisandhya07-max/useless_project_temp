@@ -1,1 +1,1 @@
-web: if [ -d backend ]; then cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT; else uvicorn main:app --host 0.0.0.0 --port $PORT; fi
+web: cd backend 2>/dev/null && uvicorn main:app --host 0.0.0.0 --port $PORT || uvicorn main:app --host 0.0.0.0 --port $PORT
