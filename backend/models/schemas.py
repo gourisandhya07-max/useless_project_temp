@@ -111,6 +111,9 @@ class ScannerFrameResponse(BaseModel):
     dog_detected: bool
     dog_count: int
     bounding_boxes: List[BoundingBox] = []
+    human_detected: bool = False
+    human_count: int = 0
+    human_bounding_boxes: List[BoundingBox] = []
     posture: Optional[str] = None
     movement: float
     restlessness: float

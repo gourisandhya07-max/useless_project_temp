@@ -79,8 +79,18 @@
                 </div>
             </div>
 
+            <!-- Tab Switcher -->
+            <div class="scanner-tab-bar">
+                <button id="tabLiveCamera" class="scanner-tab active" onclick="switchScannerTab('live')">
+                    <span>📷</span> Live Camera
+                </button>
+                <button id="tabUploadPhoto" class="scanner-tab" onclick="switchScannerTab('upload')">
+                    <span>🖼️</span> Upload Photo
+                </button>
+            </div>
+
             <!-- Camera Viewport Container -->
-            <div class="scanner-viewport">
+            <div id="paneLiveCamera" class="scanner-viewport">
                 <video id="cameraVideo" playsinline autoplay muted></video>
                 <canvas id="overlayCanvas"></canvas>
 
@@ -104,6 +114,47 @@
                     <button onclick="startScanner()" class="btn btn-primary" style="margin-top: 6px;">
                         <span>📷</span> Turn On Camera
                     </button>
+                </div>
+            </div>
+
+            <!-- Upload Photo Pane -->
+            <div id="paneUploadPhoto" class="scanner-viewport" style="display: none; background: #111;">
+                <!-- Upload drop zone (shown before image is loaded) -->
+                <div id="uploadDropZone" class="upload-drop-zone">
+                    <div class="upload-drop-icon">🖼️</div>
+                    <h3 style="color: white; font-size: 20px; margin-bottom: 8px;">Upload a Photo</h3>
+                    <p style="color: #A1A1AA; font-size: 14px; margin-bottom: 18px; max-width: 340px;">
+                        Drop a photo here, or click to choose one. We'll run it through the full AI detection pipeline.
+                    </p>
+                    <label for="photoFileInput" class="btn btn-primary" style="cursor: pointer;">
+                        <span>📂</span> Choose Photo
+                    </label>
+                    <input type="file" id="photoFileInput" accept="image/*" style="display: none;">
+                    <p style="color: #555; font-size: 12px; margin-top: 14px;">Supports JPG, PNG, WebP · Max 10 MB</p>
+                </div>
+
+                <!-- Preview area (shown after image is loaded) -->
+                <div id="uploadPreviewArea" style="display: none; position: relative; width: 100%; height: 100%;">
+                    <img id="uploadedImage" style="width: 100%; height: 100%; object-fit: contain; display: block;" alt="Uploaded photo">
+                    <canvas id="uploadOverlayCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
+                    <!-- HUD on top of uploaded image -->
+                    <div class="scanner-hud">
+                        <div id="uploadTargetBadge" class="scanner-target-badge" style="display: none;"></div>
+                        <div class="badge badge-neutral" style="background: rgba(0,0,0,0.6); color: white;">
+                            <span>🖼️</span> Photo Analysis
+                        </div>
+                    </div>
+                    <!-- Re-upload button -->
+                    <div style="position: absolute; bottom: 16px; right: 16px;">
+                        <label for="photoFileInput" class="btn btn-secondary" style="cursor: pointer; font-size: 13px;">
+                            <span>🔄</span> New Photo
+                        </label>
+                    </div>
+                    <!-- Analyzing spinner overlay -->
+                    <div id="uploadAnalyzingOverlay" style="display:none; position:absolute; inset:0; background:rgba(0,0,0,0.55); display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px;">
+                        <div class="upload-spinner"></div>
+                        <p style="color:white; font-weight:700; font-size:15px;">Analyzing photo...</p>
+                    </div>
                 </div>
             </div>
 
@@ -150,10 +201,10 @@
                 <div class="meter-group">
                     <div class="meter-label-row">
                         <span>Potty Radar</span>
-                        <span id="meterRadarText" style="color: var(--warm-brown);">25%</span>
+                        <span id="meterRadarText" style="color: var(--warm-brown);">0%</span>
                     </div>
                     <div class="meter-track">
-                        <div id="meterRadarFill" class="meter-fill" style="width: 25%; background: var(--primary);"></div>
+                        <div id="meterRadarFill" class="meter-fill" style="width: 0%; background: var(--primary);"></div>
                     </div>
                 </div>
             </div>
@@ -161,6 +212,7 @@
             <p class="disclaimer-note">
                 PawPotty is an experimental/fun prediction tool. Its estimates are not scientifically validated and are not veterinary or medical advice.
             </p>
+
         </main>
     </div>
 

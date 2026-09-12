@@ -99,6 +99,9 @@ def process_scanner_frame(
     dog_detected = yolo_result["dog_detected"]
     dog_count = yolo_result["dog_count"]
     bounding_boxes = yolo_result["bounding_boxes"]
+    human_detected = yolo_result.get("human_detected", False)
+    human_count = yolo_result.get("human_count", 0)
+    human_bounding_boxes = yolo_result.get("human_bounding_boxes", [])
 
     # 3. Custom Posture Model (null if unavailable)
     posture = None
@@ -139,6 +142,15 @@ def process_scanner_frame(
             status_message = "Pup is on the move! Tracking walking trajectory..."
         else:
             status_message = "Dog detected. Looking calm and relaxed right now."
+    elif human_detected:
+        if human_count > 1:
+            status_message = f"We see {human_count} humans. Are you walking the dog? Bring the pup closer to the camera! 👀"
+        elif movement > 0.60:
+            status_message = "Human detected — quite energetic! Is the pup nearby? 🏃"
+        elif movement > 0.25:
+            status_message = "Human in frame. Moving around... where's the doggo though? 🐾"
+        else:
+            status_message = "Hello, human! 👋 We can see you, but we're looking for your pup."
     elif capability_state == "experimental":
         # Camera is active, analyzing motion
         if restlessness > 0.70:
@@ -151,7 +163,7 @@ def process_scanner_frame(
     # 5. Only score potty signals when the frame contains a dog. Motion in an
     # empty frame must not look like a potty prediction.
     if not dog_detected:
-        potty_probability = 25
+        potty_probability = 0
         estimated_minutes = 60
     else:
         dog_profile = dog_profile or {}
@@ -180,6 +192,9 @@ def process_scanner_frame(
         "dog_detected": dog_detected,
         "dog_count": dog_count,
         "bounding_boxes": bounding_boxes,
+        "human_detected": human_detected,
+        "human_count": human_count,
+        "human_bounding_boxes": human_bounding_boxes,
         "posture": posture,
         "movement": movement,
         "restlessness": restlessness,

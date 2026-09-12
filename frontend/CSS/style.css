@@ -969,3 +969,86 @@ p {
     height: 320px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   SCANNER TAB BAR
+   -------------------------------------------------------------------------- */
+.scanner-tab-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.scanner-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 20px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--border-subtle);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-family);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.scanner-tab:hover {
+  border-color: var(--primary);
+  color: var(--primary-dark);
+  background: var(--primary-light);
+}
+
+.scanner-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(111, 175, 114, 0.35);
+}
+
+/* --------------------------------------------------------------------------
+   UPLOAD DROP ZONE
+   -------------------------------------------------------------------------- */
+.upload-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  padding: 40px 24px;
+  border: 2px dashed rgba(255,255,255,0.2);
+  border-radius: var(--radius-lg);
+  transition: border-color 0.2s ease;
+  cursor: default;
+}
+
+.upload-drop-zone:hover {
+  border-color: rgba(111, 175, 114, 0.5);
+}
+
+.upload-drop-icon {
+  font-size: 56px;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+  animation: float 3s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   UPLOAD SPINNER
+   -------------------------------------------------------------------------- */
+.upload-spinner {
+  width: 44px;
+  height: 44px;
+  border: 4px solid rgba(255,255,255,0.2);
+  border-top-color: #6FAF72;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -7,5 +7,5 @@ python-multipart>=0.0.9
 pillow>=10.0.0
 numpy>=1.26.0
 pytest>=8.0.0
-# Optional for full YOLO model loading:
-# ultralytics>=8.0.0
+# Optional for full YOLO model loading (dog + human detection):
+ultralytics>=8.0.0

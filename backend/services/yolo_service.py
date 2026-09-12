@@ -74,7 +74,8 @@ def get_yolo_capabilities() -> Dict[str, Any]:
 
 def detect_dog(image: Image.Image) -> Dict[str, Any]:
     """
-    Runs YOLO inference on the image for dog detection (COCO class 16: 'dog').
+    Runs YOLO inference on the image for dog detection (COCO class 16: 'dog')
+    and human detection (COCO class 0: 'person').
     If YOLO is unavailable, returns clean fallback indicating detection model status.
     """
     if yolo_model is None:
@@ -84,6 +85,9 @@ def detect_dog(image: Image.Image) -> Dict[str, Any]:
             "dog_count": 0,
             "bounding_boxes": [],
             "max_confidence": 0.0,
+            "human_detected": False,
+            "human_count": 0,
+            "human_bounding_boxes": [],
             "model_used": "none (ultralytics not loaded)"
         }
 
@@ -92,31 +96,49 @@ def detect_dog(image: Image.Image) -> Dict[str, Any]:
         boxes_out = []
         dog_count = 0
         max_conf = 0.0
+        human_boxes_out = []
+        human_count = 0
 
         for r in results:
             for box in r.boxes:
                 cls_id = int(box.cls[0].item())
+                conf = float(box.conf[0].item())
+
                 # COCO dataset class 16 is 'dog'
-                if cls_id == 16:
-                    conf = float(box.conf[0].item())
-                    if conf > 0.40:
-                        dog_count += 1
-                        max_conf = max(max_conf, conf)
-                        xywh = box.xywh[0].tolist()
-                        boxes_out.append({
-                            "x": round(xywh[0], 2),
-                            "y": round(xywh[1], 2),
-                            "width": round(xywh[2], 2),
-                            "height": round(xywh[3], 2),
-                            "confidence": round(conf, 2),
-                            "label": "Dog"
-                        })
+                if cls_id == 16 and conf > 0.40:
+                    dog_count += 1
+                    max_conf = max(max_conf, conf)
+                    xywh = box.xywh[0].tolist()
+                    boxes_out.append({
+                        "x": round(xywh[0], 2),
+                        "y": round(xywh[1], 2),
+                        "width": round(xywh[2], 2),
+                        "height": round(xywh[3], 2),
+                        "confidence": round(conf, 2),
+                        "label": "Dog"
+                    })
+
+                # COCO dataset class 0 is 'person'
+                elif cls_id == 0 and conf > 0.45:
+                    human_count += 1
+                    xywh = box.xywh[0].tolist()
+                    human_boxes_out.append({
+                        "x": round(xywh[0], 2),
+                        "y": round(xywh[1], 2),
+                        "width": round(xywh[2], 2),
+                        "height": round(xywh[3], 2),
+                        "confidence": round(conf, 2),
+                        "label": "Human"
+                    })
 
         return {
             "dog_detected": dog_count > 0,
             "dog_count": dog_count,
             "bounding_boxes": boxes_out,
             "max_confidence": round(max_conf, 2),
+            "human_detected": human_count > 0,
+            "human_count": human_count,
+            "human_bounding_boxes": human_boxes_out,
             "model_used": "yolov8n-coco"
         }
     except Exception as e:
@@ -125,6 +147,9 @@ def detect_dog(image: Image.Image) -> Dict[str, Any]:
             "dog_count": 0,
             "bounding_boxes": [],
             "max_confidence": 0.0,
+            "human_detected": False,
+            "human_count": 0,
+            "human_bounding_boxes": [],
             "model_used": f"error: {str(e)}"
         }
 

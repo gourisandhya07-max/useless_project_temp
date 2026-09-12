@@ -7,6 +7,7 @@ let isScanning = false;
 let activeDogId = null;
 let lastMovementVal = 0.0;
 let alertSoundPlayedForSession = false;
+let currentTab = "live"; // "live" | "upload"
 
 async function initScanner() {
     activeDogId = PawAPI.getActiveDogId();
@@ -227,13 +228,14 @@ function updateScannerTelemetry(data) {
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Draw dog bounding boxes (green)
         if (data.dog_detected && data.bounding_boxes && data.bounding_boxes.length > 0) {
             if (targetBadge) {
                 targetBadge.style.display = "flex";
                 targetBadge.innerHTML = `<span>🐶</span> Dog Detected`;
+                targetBadge.style.background = "rgba(111, 175, 114, 0.85)";
             }
 
-            // Draw bounding boxes scaled to video dimensions
             data.bounding_boxes.forEach(box => {
                 const scaleX = canvas.width / 320;
                 const scaleY = canvas.height / 240;
@@ -253,6 +255,35 @@ function updateScannerTelemetry(data) {
                 ctx.font = "bold 12px sans-serif";
                 ctx.fillText(`Dog ${(box.confidence * 100).toFixed(0)}%`, bx + 6, by - 7);
             });
+
+        // Draw human bounding boxes (blue) — only when no dog is detected
+        } else if (data.human_detected && data.human_bounding_boxes && data.human_bounding_boxes.length > 0) {
+            if (targetBadge) {
+                targetBadge.style.display = "flex";
+                targetBadge.innerHTML = `<span>👤</span> Human Detected`;
+                targetBadge.style.background = "rgba(99, 140, 210, 0.85)";
+            }
+
+            data.human_bounding_boxes.forEach(box => {
+                const scaleX = canvas.width / 320;
+                const scaleY = canvas.height / 240;
+                const bx = (box.x - box.width / 2) * scaleX;
+                const by = (box.y - box.height / 2) * scaleY;
+                const bw = box.width * scaleX;
+                const bh = box.height * scaleY;
+
+                ctx.strokeStyle = "#638CD2";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(bx, by, bw, bh);
+
+                // Label tag
+                ctx.fillStyle = "rgba(99, 140, 210, 0.9)";
+                ctx.fillRect(bx, by - 24, 120, 24);
+                ctx.fillStyle = "#FFFFFF";
+                ctx.font = "bold 12px sans-serif";
+                ctx.fillText(`Human ${(box.confidence * 100).toFixed(0)}%`, bx + 6, by - 7);
+            });
+
         } else {
             if (targetBadge) targetBadge.style.display = "none";
         }
@@ -306,4 +337,193 @@ function playChime() {
     } catch (e) {}
 }
 
-document.addEventListener("DOMContentLoaded", initScanner);
+// ─────────────────────────────────────────────
+// TAB SWITCHING
+// ─────────────────────────────────────────────
+
+function switchScannerTab(tab) {
+    currentTab = tab;
+
+    const livePane = document.getElementById("paneLiveCamera");
+    const uploadPane = document.getElementById("paneUploadPhoto");
+    const liveTab = document.getElementById("tabLiveCamera");
+    const uploadTab = document.getElementById("tabUploadPhoto");
+    const topbarBtn = document.getElementById("btnToggleScanner");
+
+    if (tab === "live") {
+        livePane.style.display = "";
+        uploadPane.style.display = "none";
+        liveTab.classList.add("active");
+        uploadTab.classList.remove("active");
+        if (topbarBtn) topbarBtn.style.display = "";
+    } else {
+        // Pause live camera when switching to upload tab
+        if (isScanning) stopScanner();
+        livePane.style.display = "none";
+        uploadPane.style.display = "";
+        liveTab.classList.remove("active");
+        uploadTab.classList.add("active");
+        if (topbarBtn) topbarBtn.style.display = "none";
+    }
+}
+
+// ─────────────────────────────────────────────
+// PHOTO UPLOAD DETECTION
+// ─────────────────────────────────────────────
+
+function initUpload() {
+    const fileInput = document.getElementById("photoFileInput");
+    const dropZone = document.getElementById("uploadDropZone");
+    const pane = document.getElementById("paneUploadPhoto");
+
+    if (!fileInput) return;
+
+    fileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) handleUploadedFile(file);
+        // reset so same file can be re-selected
+        fileInput.value = "";
+    });
+
+    // Drag and drop support
+    if (pane) {
+        pane.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            if (dropZone) dropZone.style.borderColor = "#6FAF72";
+        });
+        pane.addEventListener("dragleave", () => {
+            if (dropZone) dropZone.style.borderColor = "";
+        });
+        pane.addEventListener("drop", (e) => {
+            e.preventDefault();
+            if (dropZone) dropZone.style.borderColor = "";
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith("image/")) {
+                handleUploadedFile(file);
+            } else {
+                PawAPI.showToast("Please drop an image file (JPG, PNG, WebP).", "warning");
+            }
+        });
+    }
+}
+
+async function handleUploadedFile(file) {
+    if (file.size > 10 * 1024 * 1024) {
+        PawAPI.showToast("Image is too large. Please use a photo under 10 MB.", "warning");
+        return;
+    }
+
+    const dropZone = document.getElementById("uploadDropZone");
+    const previewArea = document.getElementById("uploadPreviewArea");
+    const uploadedImg = document.getElementById("uploadedImage");
+    const analyzingOverlay = document.getElementById("uploadAnalyzingOverlay");
+
+    // Show preview
+    const objectURL = URL.createObjectURL(file);
+    uploadedImg.src = objectURL;
+    uploadedImg.onload = () => URL.revokeObjectURL(objectURL);
+
+    dropZone.style.display = "none";
+    previewArea.style.display = "block";
+
+    // Show analyzing spinner
+    if (analyzingOverlay) {
+        analyzingOverlay.style.display = "flex";
+    }
+
+    // Read as base64
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        const base64Data = ev.target.result; // includes data:image/...;base64, prefix
+
+        try {
+            const telemetry = await PawAPI.sendFrame({
+                dog_id: activeDogId,
+                image_base64: base64Data,
+                previous_movement: 0.0
+            });
+
+            if (analyzingOverlay) analyzingOverlay.style.display = "none";
+
+            updateScannerTelemetry(telemetry);
+            renderUploadBoundingBoxes(telemetry, uploadedImg);
+            PawAPI.showToast("Photo analyzed! Check the results below. 🐾", "success");
+        } catch (e) {
+            if (analyzingOverlay) analyzingOverlay.style.display = "none";
+            PawAPI.showToast("Could not analyze the photo. Is the backend running?", "warning");
+            console.error("Upload analysis error:", e);
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function renderUploadBoundingBoxes(data, imgEl) {
+    const canvas = document.getElementById("uploadOverlayCanvas");
+    const targetBadge = document.getElementById("uploadTargetBadge");
+    if (!canvas || !imgEl) return;
+
+    // Match canvas size to rendered image display size
+    const rect = imgEl.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Natural vs display size ratios for scaling boxes
+    const scaleX = rect.width / (imgEl.naturalWidth || 320);
+    const scaleY = rect.height / (imgEl.naturalHeight || 240);
+
+    // Draw dog boxes (green)
+    if (data.dog_detected && data.bounding_boxes && data.bounding_boxes.length > 0) {
+        if (targetBadge) {
+            targetBadge.style.display = "flex";
+            targetBadge.innerHTML = `<span>🐶</span> Dog Detected`;
+            targetBadge.style.background = "rgba(111, 175, 114, 0.85)";
+        }
+        data.bounding_boxes.forEach(box => {
+            const bx = (box.x - box.width / 2) * scaleX;
+            const by = (box.y - box.height / 2) * scaleY;
+            const bw = box.width * scaleX;
+            const bh = box.height * scaleY;
+            ctx.strokeStyle = "#6FAF72";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(bx, by, bw, bh);
+            ctx.fillStyle = "rgba(111, 175, 114, 0.9)";
+            ctx.fillRect(bx, by - 24, 100, 24);
+            ctx.fillStyle = "#FFF";
+            ctx.font = "bold 13px sans-serif";
+            ctx.fillText(`Dog ${(box.confidence * 100).toFixed(0)}%`, bx + 6, by - 7);
+        });
+
+    // Draw human boxes (blue)
+    } else if (data.human_detected && data.human_bounding_boxes && data.human_bounding_boxes.length > 0) {
+        if (targetBadge) {
+            targetBadge.style.display = "flex";
+            targetBadge.innerHTML = `<span>👤</span> Human Detected`;
+            targetBadge.style.background = "rgba(99, 140, 210, 0.85)";
+        }
+        data.human_bounding_boxes.forEach(box => {
+            const bx = (box.x - box.width / 2) * scaleX;
+            const by = (box.y - box.height / 2) * scaleY;
+            const bw = box.width * scaleX;
+            const bh = box.height * scaleY;
+            ctx.strokeStyle = "#638CD2";
+            ctx.lineWidth = 3;
+            ctx.strokeRect(bx, by, bw, bh);
+            ctx.fillStyle = "rgba(99, 140, 210, 0.9)";
+            ctx.fillRect(bx, by - 24, 130, 24);
+            ctx.fillStyle = "#FFF";
+            ctx.font = "bold 13px sans-serif";
+            ctx.fillText(`Human ${(box.confidence * 100).toFixed(0)}%`, bx + 6, by - 7);
+        });
+
+    } else {
+        if (targetBadge) targetBadge.style.display = "none";
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    initScanner();
+    initUpload();
+});
